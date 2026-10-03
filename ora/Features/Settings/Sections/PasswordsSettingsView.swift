@@ -1,3 +1,4 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -116,17 +117,27 @@ struct PasswordsSettingsView: View {
                 }
             }
 
-            Toggle("Enable password manager", isOn: $settings.passwordsEnabled)
-            Toggle("Autofill on login forms", isOn: $settings.passwordAutofillEnabled)
-                .disabled(!settings.passwordsEnabled)
-            Toggle("Auto-submit after autofill", isOn: $settings.passwordAutofillSubmitEnabled)
-                .disabled(
-                    !settings.passwordsEnabled
-                        || !settings.passwordAutofillEnabled
-                        || !selectedProvider.usesBuiltInOverlay
+            if selectedProvider.kind == .applePasswords {
+                Text(
+                    "Control-click a login field, then choose AutoFill > Passwords. macOS manages Touch ID and password selection. Ora cannot change Apple's authentication requirements."
                 )
-            Toggle("Prompt to save passwords", isOn: $settings.passwordSavePromptsEnabled)
-                .disabled(!settings.passwordsEnabled || !selectedProvider.usesBuiltInVault)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            if selectedProvider.usesBuiltInVault {
+                Toggle("Enable password manager", isOn: $settings.passwordsEnabled)
+                Toggle("Autofill on login forms", isOn: $settings.passwordAutofillEnabled)
+                    .disabled(!settings.passwordsEnabled)
+                Toggle("Auto-submit after autofill", isOn: $settings.passwordAutofillSubmitEnabled)
+                    .disabled(
+                        !settings.passwordsEnabled
+                            || !settings.passwordAutofillEnabled
+                            || !selectedProvider.usesBuiltInOverlay
+                    )
+                Toggle("Prompt to save passwords", isOn: $settings.passwordSavePromptsEnabled)
+                    .disabled(!settings.passwordsEnabled || !selectedProvider.usesBuiltInVault)
+            }
 
             if !selectedProvider.isAvailable {
                 Text("\(selectedProvider.title) is not yet integrated.")
@@ -159,7 +170,13 @@ struct PasswordsSettingsView: View {
                     }
                 }
 
-                if !selectedProvider.usesBuiltInVault {
+                if selectedProvider.kind == .applePasswords {
+                    Text("Manage saved passwords, passkeys, and verification codes in Apple Passwords.")
+                        .foregroundStyle(.secondary)
+                    Button("Open Apple Passwords") {
+                        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Passwords.app"))
+                    }
+                } else if !selectedProvider.usesBuiltInVault {
                     emptyState(message: "\(selectedProvider.title) integration coming soon.")
                 } else if containers.isEmpty {
                     emptyState(message: "Create a space to start storing passwords.")

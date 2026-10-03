@@ -1,6 +1,7 @@
 import Foundation
 
 enum PasswordManagerProviderKind: String, CaseIterable, Codable, Identifiable {
+    case applePasswords
     case ora
     case onePassword
     case bitwarden
@@ -40,6 +41,14 @@ final class PasswordManagerProviderRegistry {
     static let shared = PasswordManagerProviderRegistry()
 
     let providers: [PasswordManagerProviderDescriptor] = [
+        PasswordManagerProviderDescriptor(
+            kind: .applePasswords,
+            title: "Apple Passwords",
+            summary: "Use macOS AutoFill from a login field's context menu. Passwords stay in iCloud Keychain.",
+            vaultStoredInOra: false,
+            autofillMode: .nativeProviderOverlay,
+            isAvailable: true
+        ),
         PasswordManagerProviderDescriptor(
             kind: .ora,
             title: "Ora Passwords",

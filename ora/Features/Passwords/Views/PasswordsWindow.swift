@@ -4,6 +4,10 @@ import SwiftUI
 
 @MainActor
 func openPasswordsWindow() {
+    if SettingsStore.shared.passwordManagerProvider == .applePasswords {
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Passwords.app"))
+        return
+    }
     PasswordsWindowController.shared.show()
 }
 
