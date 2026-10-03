@@ -111,8 +111,20 @@ class Tab: ObservableObject, Identifiable {
     }
 
     func ensureFavicon(using service: FaviconService = .shared) {
-        if let file = faviconLocalFile, FileManager.default.fileExists(atPath: file.path) {
-            return
+        if let file = faviconLocalFile {
+            if NSImage(contentsOf: file) != nil {
+                return
+            }
+            if let data = try? Data(contentsOf: file), let image = NSImage(data: data),
+               let png = FaviconService.pngData(for: image)
+            {
+                try? png.write(to: file, options: .atomic)
+                if NSImage(contentsOf: file) != nil {
+                    faviconLocalFile = nil
+                    faviconLocalFile = file
+                    return
+                }
+            }
         }
         setFavicon(using: service)
     }

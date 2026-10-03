@@ -7,6 +7,21 @@ import Testing
 
 @MainActor
 struct FaviconTests {
+    @Test func liveGitHubIcon() async throws {
+        guard ProcessInfo.processInfo.environment["ORA_LIVE_ICON_TEST"] == "1" else { return }
+        let service = FaviconService()
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+        defer { try? FileManager.default.removeItem(at: destination) }
+        let source = try #require(URL(string: "https://github.com"))
+        let success: Bool = await withCheckedContinuation { continuation in
+            service.downloadAndSaveFavicon(for: "github.com", faviconURL: source, to: destination) { _, success in
+                continuation.resume(returning: success)
+            }
+        }
+        #expect(success)
+        #expect(NSImage(contentsOf: destination) != nil)
+    }
+
     static func coloredIcon() throws -> (NSImage, Data) {
         let bitmap = try #require(NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16, bitsPerSample: 8,
@@ -55,8 +70,8 @@ struct FaviconTests {
         }
         #expect(results == [true, true])
         #expect(requests == 1)
-        #expect(try Data(contentsOf: first) == data)
-        #expect(try Data(contentsOf: second) == data)
+        #expect(NSImage(contentsOf: first) != nil)
+        #expect(NSImage(contentsOf: second) != nil)
     }
 
     @Test func initializesExistingUnloadedTabIconAndPersistsIt() async throws {
@@ -76,13 +91,35 @@ struct FaviconTests {
         }
         let file = try #require(tab.faviconLocalFile)
         defer { try? FileManager.default.removeItem(at: file) }
-        #expect(try Data(contentsOf: file) == data)
+        #expect(NSImage(contentsOf: file) != nil)
         #expect(!tab.isWebViewReady)
         #expect(tab.favicon == source)
         tab.ensureFavicon(using: service)
         #expect(requests == 1)
         let freshContext = ModelContext(manager.modelContainer)
         #expect(try freshContext.fetch(FetchDescriptor<Ora.Tab>()).first { $0.id == tab.id }?.faviconLocalFile == file)
+    }
+
+    @Test func repairsMislabeledCachedIconWithoutDownloading() throws {
+        let (image, _) = try Self.coloredIcon()
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+        try #require(image.tiffRepresentation).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let manager = try ImporterTests.makeManager()
+        let space = try #require(manager.activeContainer)
+        let tab = try manager.addTab(
+            url: #require(URL(string: "https://example.com")),
+            container: space,
+            isPrivate: false,
+            activate: false
+        )
+        tab.faviconLocalFile = file
+        var requests = 0
+        tab.ensureFavicon(using: FaviconService(fetcher: { _ in requests += 1
+            return nil
+        }))
+        #expect(NSImage(contentsOf: file) != nil)
+        #expect(requests == 0)
     }
 
     @Test func failedIconRequestsAreThrottled() async throws {

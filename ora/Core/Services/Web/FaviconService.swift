@@ -170,6 +170,12 @@ final class FaviconService: ObservableObject {
         }
     }
 
+    static func pngData(for image: NSImage) -> Data? {
+        guard let representation = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: representation) else { return nil }
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
     func downloadAndSaveFavicon(
         for domain: String,
         faviconURL _: URL,
@@ -179,7 +185,7 @@ final class FaviconService: ObservableObject {
         let normalizedDomain = normalizeDomain(domain)
         fetchAndCacheFavicon(for: normalizedDomain) { [weak self] image in
             guard let self, let image,
-                  let data = self.dataCache[normalizedDomain] ?? image.tiffRepresentation
+                  let data = Self.pngData(for: image)
             else {
                 completion(nil, false)
                 return
