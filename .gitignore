@@ -50,10 +50,9 @@ Temporary Items
 .zed/
 browser.wiki/
 
-# Build directory (allow directory but ignore contents)
-build/*
-!build/
-!build/.gitkeep
+# Build directory
+build/
+ora/Info/Info.dev.plist
 
 # Build artifacts and releases
 *.app

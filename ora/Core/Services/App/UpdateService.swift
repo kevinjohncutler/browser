@@ -23,6 +23,10 @@ class UpdateService: NSObject, ObservableObject {
 
     private func setupUpdater() {
         let hostBundle = Bundle.main
+        guard hostBundle.object(forInfoDictionaryKey: "OraDisableUpdates") as? Bool != true else {
+            lastCheckResult = "Updates are disabled for this development build"
+            return
+        }
         let applicationBundle = hostBundle
         let userDriver = SPUStandardUserDriver(hostBundle: hostBundle, delegate: nil)
         let updater = SPUUpdater(

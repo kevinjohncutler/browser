@@ -1,0 +1,44 @@
+include:
+- path: project.yml
+targets:
+  ora:
+    info:
+      path: ora/Info/Info.dev.plist
+      properties:
+        CFBundleDisplayName: Ora Dev
+        OraDisableUpdates: true
+        SUEnableAutomaticChecks: false
+    settings:
+      base:
+        PRODUCT_NAME: OraDev
+        PRODUCT_MODULE_NAME: Ora
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.kevinjohncutler.Ora.dev
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: ora/Info/ora.local-dev.entitlements
+          CODE_SIGN_IDENTITY: Developer ID Application
+          DEVELOPMENT_TEAM: ${ORA_DEVELOPMENT_TEAM}
+          PROVISIONING_PROFILE_SPECIFIER: ''
+          ENABLE_HARDENED_RUNTIME: true
+    entitlements:REPLACE:
+      path: ora/Info/ora.local-dev.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.assets.movies.read-only: true
+        com.apple.security.assets.music.read-only: true
+        com.apple.security.assets.pictures.read-only: true
+        com.apple.security.cs.allow-jit: true
+        com.apple.security.device.audio-input: true
+        com.apple.security.device.camera: true
+        com.apple.security.files.downloads.read-write: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.network.client: true
+        com.apple.security.print: true
+        com.apple.security.temporary-exception.mach-lookup.global-name:
+        - $(PRODUCT_BUNDLE_IDENTIFIER)-spks
+        - $(PRODUCT_BUNDLE_IDENTIFIER)-spki
+  oraTests:
+    settings:
+      base:
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/OraDev.app/Contents/MacOS/OraDev
+        BUNDLE_LOADER: $(TEST_HOST)
