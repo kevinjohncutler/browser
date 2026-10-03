@@ -384,20 +384,9 @@ final class PasswordManagerService: ObservableObject {
         return String(password.shuffled())
     }
 
+    @MainActor
     func authenticate(reason: String) async -> Bool {
-        let context = LAContext()
-        context.localizedCancelTitle = "Cancel"
-
-        var error: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            return true
-        }
-
-        return await withCheckedContinuation { continuation in
-            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, _ in
-                continuation.resume(returning: success)
-            }
-        }
+        await PasswordUnlockSession.shared.authenticate(reason: reason)
     }
 
     func canUseBiometricAuthentication() -> Bool {

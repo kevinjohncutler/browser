@@ -9,7 +9,11 @@ struct PasswordsSettingsView: View {
     private let providers = PasswordManagerProviderRegistry.shared
 
     @State private var searchText = ""
-    @State private var isUnlocked = false
+    @ObservedObject private var unlockSession = PasswordUnlockSession.shared
+    private var isUnlocked: Bool {
+        unlockSession.isUnlocked
+    }
+
     @State private var isAuthenticating = false
     @State private var selectedContainerId: UUID?
     @State private var revealedPasswordIDs: [String: String] = [:]
@@ -60,11 +64,20 @@ struct PasswordsSettingsView: View {
             }
         }
         .onDisappear {
-            lockVault()
+            revealedPasswordIDs.removeAll()
+        }
+        .onChange(of: unlockSession.isUnlocked) { _, unlocked in
+            if !unlocked {
+                revealedPasswordIDs.removeAll()
+            }
         }
         .alert("Delete saved password?", isPresented: Binding(
             get: { pendingDelete != nil },
-            set: { if !$0 { pendingDelete = nil } }
+            set: {
+                if !$0 {
+                    pendingDelete = nil
+                }
+            }
         )) {
             Button("Delete", role: .destructive) {
                 if let pendingDelete {
@@ -398,7 +411,6 @@ struct PasswordsSettingsView: View {
         Task {
             let authenticated = await passwordManager.authenticate(reason: "Unlock your saved passwords in Ora")
             await MainActor.run {
-                isUnlocked = authenticated
                 isAuthenticating = false
                 if authenticated {
                     passwordManager.refresh()
@@ -408,7 +420,7 @@ struct PasswordsSettingsView: View {
     }
 
     private func lockVault() {
-        isUnlocked = false
+        unlockSession.lock()
         isAuthenticating = false
         searchText = ""
         revealedPasswordIDs.removeAll()
