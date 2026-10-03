@@ -6,6 +6,8 @@ struct SectionDropDelegate: DropDelegate {
     @Binding var draggedItem: UUID?
     let targetSection: TabSection
     let tabManager: TabManager
+    /// The folder tabs dropped into this (empty) section should belong to (nil = ungrouped).
+    var targetFolder: Folder?
 
     func dropEntered(info: DropInfo) {
         guard let provider = info.itemProviders(for: [.text]).first else { return }
@@ -26,6 +28,7 @@ struct SectionDropDelegate: DropDelegate {
                     // Section is empty, just change type and order
                     let newType = tabType(for: self.targetSection)
                     from.type = newType
+                    from.folder = self.targetFolder
                     // Update savedURL when moving into pinned/fav; clear when moving to normal
                     switch newType {
                     case .pinned, .fav:

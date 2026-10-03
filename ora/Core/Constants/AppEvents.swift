@@ -18,6 +18,7 @@ extension Notification.Name {
     static let previousTab = Notification.Name("PreviousTab")
     static let toggleToolbar = Notification.Name("ToggleToolbar")
     static let selectTabAtIndex = Notification.Name("SelectTabAtIndex") // userInfo: ["index": Int]
+    static let importArcData = Notification.Name("ImportArcData")
 
     // Per-window settings/events
     static let setAppearance = Notification.Name("SetAppearance") // userInfo: ["appearance": String]

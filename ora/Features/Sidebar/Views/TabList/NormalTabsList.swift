@@ -3,6 +3,8 @@ import SwiftUI
 
 struct NormalTabsList: View {
     let tabs: [Tab]
+    let folders: [Folder]
+    let container: TabContainer
     @Binding var draggedItem: UUID?
     let onDrag: (UUID) -> NSItemProvider
     let onSelect: (Tab) -> Void
@@ -20,10 +22,40 @@ struct NormalTabsList: View {
     @EnvironmentObject var tabManager: TabManager
     @State private var previousTabIds: [UUID] = []
 
+    private var sortedFolders: [Folder] {
+        folders.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private var ungroupedTabs: [Tab] {
+        tabs.filter { $0.folder == nil }
+    }
+
+    private func tabs(in folder: Folder) -> [Tab] {
+        tabs.filter { $0.folder?.id == folder.id }
+    }
+
     var body: some View {
         VStack(spacing: 8) {
-            NewTabButton(addNewTab: onAddNewTab)
-            ForEach(tabs) { tab in
+            HStack(spacing: 4) {
+                NewTabButton(addNewTab: onAddNewTab)
+                NewFolderButton(container: container)
+            }
+            ForEach(sortedFolders) { folder in
+                FolderRow(
+                    folder: folder,
+                    tabs: tabs(in: folder),
+                    draggedItem: $draggedItem,
+                    onDrag: onDrag,
+                    onSelect: onSelect,
+                    onPinToggle: onPinToggle,
+                    onFavoriteToggle: onFavoriteToggle,
+                    onClose: onClose,
+                    onDuplicate: onDuplicate,
+                    onMoveToContainer: onMoveToContainer,
+                    containers: containers
+                )
+            }
+            ForEach(ungroupedTabs) { tab in
                 TabItem(
                     tab: tab,
                     isSelected: tabManager.isActive(tab),
@@ -55,23 +87,23 @@ struct NormalTabsList: View {
         .onDrop(
             of: [.text],
             delegate: SectionDropDelegate(
-                items: tabs,
+                items: ungroupedTabs,
                 draggedItem: $draggedItem,
                 targetSection: .normal,
                 tabManager: tabManager
             )
         )
         .onAppear {
-            previousTabIds = tabs.map(\.id)
+            previousTabIds = ungroupedTabs.map(\.id)
         }
-        .onChange(of: tabs.map(\.id)) { _, newTabIds in
+        .onChange(of: ungroupedTabs.map(\.id)) { _, newTabIds in
             previousTabIds = newTabIds
         }
     }
 
     private func shouldAnimate(_ tab: Tab) -> Bool {
         // Only animate if the tab's position has actually changed
-        guard let currentIndex = tabs.firstIndex(where: { $0.id == tab.id }),
+        guard let currentIndex = ungroupedTabs.firstIndex(where: { $0.id == tab.id }),
               let previousIndex = previousTabIds.firstIndex(where: { $0 == tab.id })
         else {
             return true // Animate new tabs or tabs that were just created

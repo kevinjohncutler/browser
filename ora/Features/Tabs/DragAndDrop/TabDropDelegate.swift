@@ -13,6 +13,8 @@ struct TabDropDelegate: DropDelegate {
     @Binding var draggedItem: UUID?
 
     let targetSection: TabSection
+    /// The folder the dragged tab should belong to after the drop (nil = ungrouped).
+    var targetFolder: Folder?
 
     func dropEntered(info: DropInfo) {
         guard let provider = info.itemProviders(for: [.text]).first else { return }
@@ -48,6 +50,7 @@ struct TabDropDelegate: DropDelegate {
                                 dampingFraction: 0.8
                             )
                         ) {
+                            from.folder = self.targetFolder
                             self.item.container
                                 .reorderTabs(
                                     from: from,
@@ -55,6 +58,7 @@ struct TabDropDelegate: DropDelegate {
                                 )
                         }
                     } else {
+                        from.folder = self.targetFolder
                         moveTabBetweenSections(from: from, to: self.item)
                     }
                 }

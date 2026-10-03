@@ -123,6 +123,8 @@ struct ItemContainerData: Decodable {
         let topApps: [String: TopApp]?
 
         struct TopApp: Decodable {
+            /// Arc puts heterogeneous JSON here (bool in some exports, object in others);
+            /// decode permissively since we never read this value.
             let `default`: AnyCodable?
         }
     }
@@ -195,18 +197,27 @@ func getRoot() -> Root? {
     }
 }
 
-struct CleanSpace {
-    var emoji: String?
-    var title: String?
-    var containerIDs: Set<String>  = []
-    var container: TabContainer?
-}
-
 struct CleanTab {
     var title: String
     var urlString: String
     var id: String
     var parentID: String
+}
+
+/// A user-created Arc folder (a titled, non-tab item with children). Arc allows folders to
+/// nest inside folders; Ora's folder model is flat, so nested folders are flattened to a
+/// single level under their owning space rather than dropping tabs or folder names.
+struct CleanFolder {
+    var title: String
+    var tabs: [CleanTab] = []
+}
+
+struct CleanSpace {
+    var emoji: String?
+    var title: String?
+    var containerIDs: Set<String> = []
+    var container: TabContainer?
+    var folders: [CleanFolder] = []
 }
 
 struct Result {
@@ -215,10 +226,21 @@ struct Result {
     var favs: Set<String> = []
 }
 
+/// An item is a user folder if it has a title and children but is neither a tab, an easel,
+/// nor one of Arc's own system containers (pinned/unpinned/topApps lists), which are never titled.
+private func isUserFolder(_ item: ItemObject) -> Bool {
+    item.title != nil
+        && !item.childrenIds.isEmpty
+        && item.data?.tab == nil
+        && item.data?.easel == nil
+        && item.data?.itemContainer == nil
+}
+
 func inspectItems(_ root: Root) -> Result {
     var cleanSpaces: [CleanSpace] = []
     var cleanTabs: [CleanTab] = []
     var topIds: [String] = []
+    var itemsByID: [String: ItemObject] = [:]
 
     for container in root.sidebar.containers {
         if let spaces = container.spaces {
@@ -258,6 +280,7 @@ func inspectItems(_ root: Root) -> Result {
                     logger.debug("ID: \(id)")
                 case let .object(itemObject):
                     objectCount += 1
+                    itemsByID[itemObject.id] = itemObject
 
                     if let data = itemObject.data {
                         if let tab = data.tab {
@@ -290,6 +313,31 @@ func inspectItems(_ root: Root) -> Result {
             }
         }
     }
+
+    /// Walks parentID links up from `id` until it reaches one of the space's own
+    /// top-level container ids, identifying which space (possibly nested folders
+    /// deep) an item ultimately belongs to.
+    func owningSpaceIndex(startingAt id: String) -> Int? {
+        var currentID: String? = id
+        var hops = 0
+        while let cid = currentID, hops < 50 {
+            if let index = cleanSpaces.firstIndex(where: { $0.containerIDs.contains(cid) }) {
+                return index
+            }
+            currentID = itemsByID[cid]?.parentID
+            hops += 1
+        }
+        return nil
+    }
+
+    let cleanTabsByID = Dictionary(uniqueKeysWithValues: cleanTabs.map { ($0.id, $0) })
+
+    for item in itemsByID.values where isUserFolder(item) {
+        guard let spaceIndex = owningSpaceIndex(startingAt: item.id) else { continue }
+        let childTabs = item.childrenIds.compactMap { cleanTabsByID[$0] }
+        cleanSpaces[spaceIndex].folders.append(CleanFolder(title: item.title ?? "Folder", tabs: childTabs))
+    }
+
     var result = Result(
         cleanSpaces: cleanSpaces,
         cleanTabs: cleanTabs
@@ -299,4 +347,70 @@ func inspectItems(_ root: Root) -> Result {
     }
 
     return result
+}
+
+/// Imports Arc's spaces, tabs, and folders into Ora. Runs on the main actor since it drives
+/// TabManager, which is main-actor isolated.
+@MainActor
+func importArcData(
+    tabManager: TabManager,
+    historyManager: HistoryManager,
+    downloadManager: DownloadManager,
+    isPrivate: Bool
+) {
+    guard let root = getRoot() else {
+        logger.error("Arc import: no root found (StorableSidebar.json missing or undecodable)")
+        return
+    }
+    let result = inspectItems(root)
+
+    func addTab(_ tab: CleanTab, to container: TabContainer) -> Tab? {
+        guard let url = URL(string: tab.urlString) else { return nil }
+        return tabManager.addTab(
+            title: tab.title,
+            url: url,
+            container: container,
+            historyManager: historyManager,
+            downloadManager: downloadManager,
+            isPrivate: isPrivate
+        )
+    }
+
+    var newContainers: [TabContainer] = []
+
+    for space in result.cleanSpaces {
+        let container = tabManager.createContainer(name: space.title ?? "Unknown", emoji: space.emoji ?? "💀")
+        newContainers.append(container)
+
+        let folderedTabIDs = Set(space.folders.flatMap { $0.tabs.map(\.id) })
+        for tab in result.cleanTabs
+            where space.containerIDs.contains(tab.parentID) && !folderedTabIDs.contains(tab.id)
+        {
+            if let newTab = addTab(tab, to: container) {
+                tabManager.togglePinTab(newTab)
+            }
+        }
+
+        for folder in space.folders {
+            let newFolder = tabManager.createFolder(name: folder.title, in: container)
+            for tab in folder.tabs {
+                if let newTab = addTab(tab, to: container) {
+                    tabManager.moveTab(newTab, toFolder: newFolder)
+                }
+            }
+        }
+    }
+
+    var seenContainers: Set<UUID> = []
+    for container in newContainers {
+        if seenContainers.contains(container.id) {
+            continue
+        }
+        seenContainers.insert(container.id)
+        for tab in result.cleanTabs where result.favs.contains(tab.parentID) {
+            if let newTab = addTab(tab, to: container) {
+                tabManager.toggleFavTab(newTab)
+            }
+        }
+    }
 }

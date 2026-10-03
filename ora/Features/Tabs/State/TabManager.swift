@@ -235,6 +235,66 @@ class TabManager: ObservableObject {
         try? modelContext.save()
     }
 
+    // MARK: - Folder Public API's
+
+    @discardableResult
+    func createFolder(name: String, in container: TabContainer, parent: Folder? = nil) -> Folder {
+        let newFolder = Folder(name: name, container: container)
+        newFolder.parentFolder = parent
+        modelContext.insert(newFolder)
+        container.folders.append(newFolder)
+        try? modelContext.save()
+        return newFolder
+    }
+
+    func renameFolder(_ folder: Folder, name: String) {
+        guard !name.isEmpty else { return }
+        folder.name = name
+        try? modelContext.save()
+    }
+
+    func toggleFolderOpen(_ folder: Folder) {
+        folder.isOpened.toggle()
+        try? modelContext.save()
+    }
+
+    /// Deletes a folder without closing its tabs or subfolders; both are promoted to the
+    /// deleted folder's parent (or to the container's ungrouped tabs/top-level folders if it had none).
+    func deleteFolder(_ folder: Folder) {
+        for tab in folder.tabs {
+            tab.folder = folder.parentFolder
+        }
+        for sub in folder.subfolders {
+            sub.parentFolder = folder.parentFolder
+        }
+        modelContext.delete(folder)
+        try? modelContext.save()
+    }
+
+    func moveTab(_ tab: Tab, toFolder folder: Folder?) {
+        guard tab.folder?.id != folder?.id else { return }
+        tab.folder = folder
+        if let folder, folder.container.id != tab.container.id {
+            tab.container = folder.container
+        }
+        try? modelContext.save()
+    }
+
+    /// Nests `folder` inside `parent` (or moves it to the top level if `parent` is nil).
+    /// No-ops if that would create a cycle (nesting a folder inside itself or a descendant).
+    func moveFolder(_ folder: Folder, toParent parent: Folder?) {
+        guard folder.id != parent?.id else { return }
+        var cursor = parent
+        while let candidate = cursor {
+            if candidate.id == folder.id {
+                return
+            }
+            cursor = candidate.parentFolder
+        }
+        folder.parentFolder = parent
+        try? modelContext.save()
+    }
+
     // MARK: - Tab Public API's
 
     func addTab(
