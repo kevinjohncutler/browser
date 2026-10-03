@@ -150,13 +150,11 @@ struct SidebarView: View {
 
     private var spacesContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if sidebarManager.sidebarPosition == .secondary, !toolbarManager.isToolbarHidden {
-                Spacer().frame(height: 8)
-            } else if appState.isFullscreen, !toolbarManager.isToolbarHidden {
-                Spacer().frame(height: 8)
-            } else {
-                SidebarHeader()
-            }
+            SidebarHeader()
+            URLBar(onSidebarToggle: { sidebarManager.toggleSidebar() }, isInSidebar: true)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+                .zIndex(2)
             NSPageView(
                 selection: selectedContainerIndex,
                 pageObjects: containers,

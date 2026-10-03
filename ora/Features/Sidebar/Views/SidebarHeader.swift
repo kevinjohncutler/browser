@@ -10,7 +10,6 @@ struct SidebarHeader: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var tabManager: TabManager
     @EnvironmentObject var sidebarManager: SidebarManager
-    @EnvironmentObject var toolbarManager: ToolbarManager
 
     private var sidebarIcon: String {
         sidebarManager.sidebarPosition == .secondary ? "sidebar.right" : "sidebar.left"
@@ -23,7 +22,7 @@ struct SidebarHeader: View {
                     .frame(height: 30)
             }
 
-            if toolbarManager.isToolbarHidden {
+            Group {
                 HStack(spacing: 0) {
                     if sidebarManager.sidebarPosition == .primary {
                         URLBarButton(
@@ -46,6 +45,7 @@ struct SidebarHeader: View {
                             }
                         }
                     )
+                    .oraShortcut(KeyboardShortcuts.Navigation.back)
                     .oraShortcutHelp("Go Back", for: KeyboardShortcuts.Navigation.back)
 
                     URLBarButton(
@@ -58,6 +58,7 @@ struct SidebarHeader: View {
                             }
                         }
                     )
+                    .oraShortcut(KeyboardShortcuts.Navigation.forward)
                     .oraShortcutHelp("Go Forward", for: KeyboardShortcuts.Navigation.forward)
 
                     URLBarButton(
@@ -70,6 +71,7 @@ struct SidebarHeader: View {
                             }
                         }
                     )
+                    .oraShortcut(KeyboardShortcuts.Navigation.reload)
                     .oraShortcutHelp("Reload This Page", for: KeyboardShortcuts.Navigation.reload)
 
                     if sidebarManager.sidebarPosition == .secondary {

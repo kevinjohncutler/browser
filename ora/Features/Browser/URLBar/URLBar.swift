@@ -28,6 +28,7 @@ struct URLBar: View {
     @State private var suppressInitialSearch = false
 
     let onSidebarToggle: () -> Void
+    var isInSidebar = false
 
     private var isEditing: Bool {
         appState.isURLBarEditing
@@ -54,6 +55,9 @@ struct URLBar: View {
     }
 
     var buttonForegroundColor: Color {
+        if isInSidebar {
+            return theme.foreground.opacity(0.7)
+        }
         return tabManager.activeTab.map { getForegroundColor($0).opacity(0.5) } ?? .gray
     }
 
@@ -166,49 +170,51 @@ struct URLBar: View {
     var body: some View {
         if let tab = tabManager.activeTab {
             HStack(spacing: 4) {
-                if toolbarManager.isToolbarHidden || sidebarManager.sidebarPosition == .secondary {
-                    WindowControls(isFullscreen: appState.isFullscreen)
-                }
+                if !isInSidebar {
+                    if toolbarManager.isToolbarHidden || sidebarManager.sidebarPosition == .secondary {
+                        WindowControls(isFullscreen: appState.isFullscreen)
+                    }
 
-                if sidebarManager.sidebarPosition == .primary {
+                    if sidebarManager.sidebarPosition == .primary {
+                        URLBarButton(
+                            systemName: "sidebar.left",
+                            isEnabled: true,
+                            foregroundColor: buttonForegroundColor,
+                            action: onSidebarToggle
+                        )
+                        .oraShortcutHelp("Toggle Sidebar", for: KeyboardShortcuts.App.toggleSidebar)
+                    }
+
+                    // Back button
                     URLBarButton(
-                        systemName: "sidebar.left",
-                        isEnabled: true,
+                        systemName: "chevron.left",
+                        isEnabled: tabManager.activeTab?.canGoBack ?? false,
                         foregroundColor: buttonForegroundColor,
-                        action: onSidebarToggle
+                        action: { tabManager.activeTab?.goBack() }
                     )
-                    .oraShortcutHelp("Toggle Sidebar", for: KeyboardShortcuts.App.toggleSidebar)
+                    .oraShortcut(KeyboardShortcuts.Navigation.back)
+                    .oraShortcutHelp("Go Back", for: KeyboardShortcuts.Navigation.back)
+
+                    // Forward button
+                    URLBarButton(
+                        systemName: "chevron.right",
+                        isEnabled: tabManager.activeTab?.canGoForward ?? false,
+                        foregroundColor: buttonForegroundColor,
+                        action: { tabManager.activeTab?.goForward() }
+                    )
+                    .oraShortcut(KeyboardShortcuts.Navigation.forward)
+                    .oraShortcutHelp("Go Forward", for: KeyboardShortcuts.Navigation.forward)
+
+                    // Reload button
+                    URLBarButton(
+                        systemName: "arrow.clockwise",
+                        isEnabled: tabManager.activeTab != nil,
+                        foregroundColor: buttonForegroundColor,
+                        action: { tabManager.activeTab?.reload() }
+                    )
+                    .oraShortcut(KeyboardShortcuts.Navigation.reload)
+                    .oraShortcutHelp("Reload This Page", for: KeyboardShortcuts.Navigation.reload)
                 }
-
-                // Back button
-                URLBarButton(
-                    systemName: "chevron.left",
-                    isEnabled: tabManager.activeTab?.canGoBack ?? false,
-                    foregroundColor: buttonForegroundColor,
-                    action: { tabManager.activeTab?.goBack() }
-                )
-                .oraShortcut(KeyboardShortcuts.Navigation.back)
-                .oraShortcutHelp("Go Back", for: KeyboardShortcuts.Navigation.back)
-
-                // Forward button
-                URLBarButton(
-                    systemName: "chevron.right",
-                    isEnabled: tabManager.activeTab?.canGoForward ?? false,
-                    foregroundColor: buttonForegroundColor,
-                    action: { tabManager.activeTab?.goForward() }
-                )
-                .oraShortcut(KeyboardShortcuts.Navigation.forward)
-                .oraShortcutHelp("Go Forward", for: KeyboardShortcuts.Navigation.forward)
-
-                // Reload button
-                URLBarButton(
-                    systemName: "arrow.clockwise",
-                    isEnabled: tabManager.activeTab != nil,
-                    foregroundColor: buttonForegroundColor,
-                    action: { tabManager.activeTab?.reload() }
-                )
-                .oraShortcut(KeyboardShortcuts.Navigation.reload)
-                .oraShortcutHelp("Reload This Page", for: KeyboardShortcuts.Navigation.reload)
 
                 // URL field area - morphs between display and launcher input
                 Group {
@@ -238,7 +244,7 @@ struct URLBar: View {
                     }
                 )
 
-                if sidebarManager.sidebarPosition == .secondary {
+                if !isInSidebar, sidebarManager.sidebarPosition == .secondary {
                     URLBarButton(
                         systemName: "sidebar.right",
                         isEnabled: true,
@@ -251,22 +257,27 @@ struct URLBar: View {
             .padding(4)
             .background(
                 Rectangle()
-                    .fill(tab.backgroundColor)
+                    .fill(isInSidebar ? theme.subtleWindowBackgroundColor : tab.backgroundColor)
             )
             .animation(.easeOut(duration: 0.25), value: isEditing)
             // Hidden button for keyboard shortcut
             .overlay(
                 Button("") { startEditing() }
+                    .disabled(isInSidebar)
                     .oraShortcut(KeyboardShortcuts.Address.focus)
                     .opacity(0)
                     .allowsHitTesting(false)
             )
             .onChange(of: tabManager.activeTab?.id) { _, _ in
-                if isEditing { dismissEditing() }
+                if isEditing {
+                    dismissEditing()
+                }
             }
             .onChange(of: appState.showLauncher) { _, newValue in
                 // Dismiss URL bar editing if the center launcher is opened
-                if newValue, isEditing { dismissEditing() }
+                if newValue, isEditing {
+                    dismissEditing()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .copyAddressURL)) { _ in
                 if let activeTab = tabManager.activeTab {
@@ -308,13 +319,13 @@ struct URLBar: View {
                 let parts = URLDisplayUtils.displayParts(
                     url: tab.url,
                     title: tab.title,
-                    showFull: toolbarManager.showFullURL
+                    showFull: !isInSidebar && toolbarManager.showFullURL
                 )
                 HStack(spacing: 0) {
                     Text(parts.host)
                         .font(.system(size: 14))
                         .foregroundColor(buttonForegroundColor)
-                    if let title = parts.title {
+                    if !isInSidebar, let title = parts.title {
                         Text(" / \(title)")
                             .font(.system(size: 14))
                             .foregroundColor(buttonForegroundColor.opacity(0.6))
@@ -379,8 +390,8 @@ struct URLBar: View {
                 onMoveDown: {
                     launcherViewModel.moveFocusedElement(.down)
                 },
-                cursorColor: getForegroundColor(tab).opacity(0.8),
-                textColor: getForegroundColor(tab).opacity(0.7),
+                cursorColor: isInSidebar ? buttonForegroundColor : getForegroundColor(tab).opacity(0.8),
+                textColor: isInSidebar ? buttonForegroundColor : getForegroundColor(tab).opacity(0.7),
                 placeholder: "Search the web or enter URL..."
             )
             .textFieldStyle(PlainTextFieldStyle())

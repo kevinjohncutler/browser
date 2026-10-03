@@ -10,12 +10,9 @@ struct BrowserView: View {
     @EnvironmentObject private var historyManager: HistoryManager
     @EnvironmentObject private var privacyMode: PrivacyMode
     @EnvironmentObject private var sidebarManager: SidebarManager
-    @EnvironmentObject private var toolbarManager: ToolbarManager
 
     @ObserveInjection var inject
 
-    @State private var isMouseOverURLBar = false
-    @State private var showFloatingURLBar = false
     @State private var isMouseOverSidebar = false
     @State private var showFloatingSidebar = false
 
@@ -88,13 +85,17 @@ struct BrowserView: View {
                     isDownloadsOpen: downloadManager.isShowingDownloadsHistory
                 )
             }
-
-            if toolbarManager.isToolbarHidden, sidebarManager.sidebarPosition != .primary {
-                FloatingURLBar(
-                    showFloatingURLBar: $showFloatingURLBar,
-                    isMouseOverURLBar: $isMouseOverURLBar
-                )
+        }
+        .overlay {
+            Button("") {
+                if sidebarManager.isSidebarHidden {
+                    sidebarManager.toggleSidebar()
+                }
+                appState.isURLBarEditing = true
             }
+            .oraShortcut(KeyboardShortcuts.Address.focus)
+            .opacity(0)
+            .allowsHitTesting(false)
         }
         .edgesIgnoringSafeArea(.all)
         .enableInjection()
