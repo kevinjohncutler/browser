@@ -204,6 +204,12 @@ struct ImporterTests {
         }
     }
 
+    @Test func arcPickerStartsOutsideTheSandboxContainer() {
+        let directory = arcImportDirectory()
+        #expect(directory.path.hasSuffix("/Library/Application Support/Arc"))
+        #expect(!directory.path.contains("/Library/Containers/"))
+    }
+
     @Test func completesActualFolderDropHandlersHeadlessly() throws {
         let manager = try Self.makeManager()
         let space = try #require(manager.activeContainer)

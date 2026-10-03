@@ -1,3 +1,4 @@
+import Darwin
 import os.log
 import SwiftUI
 
@@ -199,6 +200,14 @@ func getRoot(from sourceURL: URL? = nil) -> Root? {
 }
 
 /// The system picker grants the sandbox access to the selected Arc export.
+func arcImportDirectory() -> URL {
+    // FileManager's home URL points into the app container when sandboxed.
+    let home = getpwuid(getuid()).flatMap { entry in
+        entry.pointee.pw_dir.map { String(cString: $0) }
+    } ?? NSHomeDirectory()
+    return URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support/Arc")
+}
+
 @MainActor
 func requestArcImport(
     tabManager: TabManager,
@@ -212,8 +221,8 @@ func requestArcImport(
     panel.prompt = "Import"
     panel.canChooseDirectories = false
     panel.allowsMultipleSelection = false
-    panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Arc")
+    panel.showsHiddenFiles = true
+    panel.directoryURL = arcImportDirectory()
     panel.begin { response in
         guard response == .OK, let url = panel.url else { return }
         let accessing = url.startAccessingSecurityScopedResource()
