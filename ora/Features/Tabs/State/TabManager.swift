@@ -137,6 +137,9 @@ class TabManager: ObservableObject {
     // MARK: - Container Public API's
 
     func moveTabToContainer(_ tab: Tab, toContainer: TabContainer) {
+        if tab.container.id != toContainer.id {
+            tab.folder = nil
+        }
         tab.container = toContainer
         try? modelContext.save()
     }
@@ -240,7 +243,10 @@ class TabManager: ObservableObject {
     @discardableResult
     func createFolder(name: String, in container: TabContainer, parent: Folder? = nil) -> Folder {
         let newFolder = Folder(name: name, container: container)
-        newFolder.parentFolder = parent
+        if parent?.container.id == container.id {
+            newFolder.parentFolder = parent
+            parent?.isOpened = true
+        }
         modelContext.insert(newFolder)
         container.folders.append(newFolder)
         try? modelContext.save()
@@ -277,6 +283,7 @@ class TabManager: ObservableObject {
         if let folder, folder.container.id != tab.container.id {
             tab.container = folder.container
         }
+        folder?.isOpened = true
         try? modelContext.save()
     }
 
@@ -284,14 +291,18 @@ class TabManager: ObservableObject {
     /// No-ops if that would create a cycle (nesting a folder inside itself or a descendant).
     func moveFolder(_ folder: Folder, toParent parent: Folder?) {
         guard folder.id != parent?.id else { return }
+        guard parent == nil || parent?.container.id == folder.container.id else { return }
         var cursor = parent
+        var visited: Set<UUID> = []
         while let candidate = cursor {
+            guard visited.insert(candidate.id).inserted else { return }
             if candidate.id == folder.id {
                 return
             }
             cursor = candidate.parentFolder
         }
         folder.parentFolder = parent
+        parent?.isOpened = true
         try? modelContext.save()
     }
 
@@ -305,7 +316,8 @@ class TabManager: ObservableObject {
         favicon: URL? = nil,
         historyManager: HistoryManager? = nil,
         downloadManager: DownloadManager? = nil,
-        isPrivate: Bool
+        isPrivate: Bool,
+        activate: Bool = true
     ) -> Tab {
         let cleanHost: String? = {
             guard let host = url.host else { return nil }
@@ -313,7 +325,7 @@ class TabManager: ObservableObject {
         }()
         let newTab = Tab(
             url: url,
-            title: cleanHost ?? "New Tab",
+            title: title == "Untitled" ? cleanHost ?? "New Tab" : title,
             favicon: favicon,
             container: container,
             type: .normal,
@@ -326,25 +338,25 @@ class TabManager: ObservableObject {
         )
         modelContext.insert(newTab)
         container.tabs.append(newTab)
-        activeTab?.maybeIsActive  = false
-        activeTab = newTab
-        activeTab?.maybeIsActive  = true
-        newTab.lastAccessedAt = Date()
-        container.lastAccessedAt = Date()
-
-        // Initialize the WebView for the new active tab
-        newTab.restoreTransientState(
-            historyManager: historyManager ?? HistoryManager(
-                modelContainer: modelContainer,
-                modelContext: modelContext
-            ),
-            downloadManager: downloadManager ?? DownloadManager(
-                modelContainer: modelContainer,
-                modelContext: modelContext
-            ),
-            tabManager: self,
-            isPrivate: isPrivate
-        )
+        if activate {
+            activeTab?.maybeIsActive = false
+            activeTab = newTab
+            activeTab?.maybeIsActive = true
+            newTab.lastAccessedAt = Date()
+            container.lastAccessedAt = Date()
+            newTab.restoreTransientState(
+                historyManager: historyManager ?? HistoryManager(
+                    modelContainer: modelContainer,
+                    modelContext: modelContext
+                ),
+                downloadManager: downloadManager ?? DownloadManager(
+                    modelContainer: modelContainer,
+                    modelContext: modelContext
+                ),
+                tabManager: self,
+                isPrivate: isPrivate
+            )
+        }
 
         try? modelContext.save()
         return newTab

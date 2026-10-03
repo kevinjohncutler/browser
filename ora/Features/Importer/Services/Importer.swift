@@ -183,10 +183,11 @@ struct TopAppsObject: Decodable {
     // Add more fields as needed based on actual JSON structure
 }
 
-func getRoot() -> Root? {
-    let url = URL(fileURLWithPath: NSString(string: "~/Library/Application Support/Arc/StorableSidebar.json")
-        .expandingTildeInPath
-    )
+func getRoot(from sourceURL: URL? = nil) -> Root? {
+    let url = sourceURL ??
+        URL(fileURLWithPath: NSString(string: "~/Library/Application Support/Arc/StorableSidebar.json")
+            .expandingTildeInPath
+        )
 
     do {
         let data = try Data(contentsOf: url)
@@ -197,6 +198,48 @@ func getRoot() -> Root? {
     }
 }
 
+/// The system picker grants the sandbox access to the selected Arc export.
+@MainActor
+func requestArcImport(
+    tabManager: TabManager,
+    historyManager: HistoryManager,
+    downloadManager: DownloadManager,
+    isPrivate: Bool
+) {
+    let panel = NSOpenPanel()
+    panel.title = "Import Arc Tabs and Folders"
+    panel.message = "Select Arc's StorableSidebar.json file."
+    panel.prompt = "Import"
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = false
+    panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/Arc")
+    panel.begin { response in
+        guard response == .OK, let url = panel.url else { return }
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        guard let root = getRoot(from: url) else {
+            let alert = NSAlert()
+            alert.messageText = "Unable to Import Arc Data"
+            alert.informativeText = "Choose a valid StorableSidebar.json file from Arc."
+            alert.runModal()
+            return
+        }
+        importArcData(
+            tabManager: tabManager,
+            historyManager: historyManager,
+            downloadManager: downloadManager,
+            isPrivate: isPrivate,
+            root: root,
+            activateFirstTab: true
+        )
+    }
+}
+
 struct CleanTab {
     var title: String
     var urlString: String
@@ -204,20 +247,19 @@ struct CleanTab {
     var parentID: String
 }
 
-/// A user-created Arc folder (a titled, non-tab item with children). Arc allows folders to
-/// nest inside folders; Ora's folder model is flat, so nested folders are flattened to a
-/// single level under their owning space rather than dropping tabs or folder names.
+/// A folder retains its source identity so parent links can be reconstructed after insertion.
 struct CleanFolder {
+    var id: String
+    var parentID: String?
     var title: String
-    var tabs: [CleanTab] = []
 }
 
 struct CleanSpace {
     var emoji: String?
     var title: String?
     var containerIDs: Set<String> = []
-    var container: TabContainer?
     var folders: [CleanFolder] = []
+    var tabs: [CleanTab] = []
 }
 
 struct Result {
@@ -226,127 +268,104 @@ struct Result {
     var favs: Set<String> = []
 }
 
-/// An item is a user folder if it has a title and children but is neither a tab, an easel,
-/// nor one of Arc's own system containers (pinned/unpinned/topApps lists), which are never titled.
 private func isUserFolder(_ item: ItemObject) -> Bool {
     item.title != nil
-        && !item.childrenIds.isEmpty
         && item.data?.tab == nil
         && item.data?.easel == nil
         && item.data?.itemContainer == nil
 }
 
 func inspectItems(_ root: Root) -> Result {
-    var cleanSpaces: [CleanSpace] = []
-    var cleanTabs: [CleanTab] = []
-    var topIds: [String] = []
+    var spaces: [CleanSpace] = []
+    var items: [ItemObject] = []
     var itemsByID: [String: ItemObject] = [:]
-
+    var favorites: Set<String> = []
     for container in root.sidebar.containers {
-        if let spaces = container.spaces {
-            for item in spaces {
-                switch item {
-                case let .custom(customInfo):
-                    var cleanSpace = CleanSpace(
-                        emoji: customInfo.customInfo.iconType.emoji_v2,
-                        title: customInfo.title,
-                        containerIDs: []
-                    )
-                    for cid in customInfo.containerIDs {
-                        cleanSpace.containerIDs
-                            .insert(cid)
-                    }
-                    cleanSpace.containerIDs
-                        .insert(customInfo.id)
-
-                    cleanSpaces.append(cleanSpace)
-                case let .id(id):
-                    logger.debug("Space ID: \(id)")
-                }
+        for entry in container.spaces ?? [] {
+            if case let .custom(space) = entry {
+                spaces.append(CleanSpace(
+                    emoji: space.customInfo.iconType.emoji_v2,
+                    title: space.title,
+                    containerIDs: Set(space.containerIDs + [space.id])
+                ))
             }
-        } else {
-            logger.debug("No spaces")
         }
-
-        // Inspect items with detailed output
-        if let items = container.items {
-            var idCount = 0
-            var objectCount = 0
-            for (itemIndex, item) in items.enumerated() {
-                logger.debug("Item \(itemIndex + 1):")
-                switch item {
-                case let .id(id):
-                    idCount += 1
-                    logger.debug("ID: \(id)")
-                case let .object(itemObject):
-                    objectCount += 1
-                    itemsByID[itemObject.id] = itemObject
-
-                    if let data = itemObject.data {
-                        if let tab = data.tab {
-                            if let parentID = itemObject.parentID, let urlString = tab.savedURL {
-                                cleanTabs.append(
-                                    CleanTab(
-                                        title: tab.savedTitle ?? "New Tab",
-                                        urlString: urlString,
-                                        id: itemObject.id,
-                                        parentID: parentID
-                                    )
-                                )
-                            }
-                        }
-                    }
+        for entry in container.items ?? [] {
+            if case let .object(item) = entry {
+                if itemsByID[item.id] == nil {
+                    items.append(item)
                 }
+                itemsByID[item.id] = item
             }
-            logger.debug("    Total: \(idCount) IDs, \(objectCount) objects")
         }
-
-        // Inspect topAppsContainerIDs
-        if let topApps = container.topAppsContainerIDs {
-            for topApp in topApps {
-                switch topApp {
-                case let .id(id):
-                    topIds.append(id)
-                case let .object(obj):
-                    logger.debug("TopApp Object: id=\(obj.id ?? "n/a")")
+        for entry in container.topAppsContainerIDs ?? [] {
+            switch entry {
+            case let .id(id): favorites.insert(id)
+            case let .object(object):
+                if let id = object.id {
+                    favorites.insert(id)
                 }
             }
         }
     }
 
-    /// Walks parentID links up from `id` until it reaches one of the space's own
-    /// top-level container ids, identifying which space (possibly nested folders
-    /// deep) an item ultimately belongs to.
-    func owningSpaceIndex(startingAt id: String) -> Int? {
-        var currentID: String? = id
-        var hops = 0
-        while let cid = currentID, hops < 50 {
-            if let index = cleanSpaces.firstIndex(where: { $0.containerIDs.contains(cid) }) {
+    /// Traverse parent links with a visited set, so malformed cycles cannot hang an import.
+    func owningSpace(startingAt id: String) -> Int? {
+        var cursor: String? = id
+        var visited: Set<String> = []
+        while let current = cursor, visited.insert(current).inserted {
+            if let index = spaces.firstIndex(where: { $0.containerIDs.contains(current) }) {
                 return index
             }
-            currentID = itemsByID[cid]?.parentID
-            hops += 1
+            cursor = itemsByID[current]?.parentID
         }
         return nil
     }
 
-    let cleanTabsByID = Dictionary(uniqueKeysWithValues: cleanTabs.map { ($0.id, $0) })
-
-    for item in itemsByID.values where isUserFolder(item) {
-        guard let spaceIndex = owningSpaceIndex(startingAt: item.id) else { continue }
-        let childTabs = item.childrenIds.compactMap { cleanTabsByID[$0] }
-        cleanSpaces[spaceIndex].folders.append(CleanFolder(title: item.title ?? "Folder", tabs: childTabs))
+    let tabs = items.compactMap { item -> CleanTab? in
+        guard let tab = item.data?.tab, let url = tab.savedURL, let parent = item.parentID else { return nil }
+        return CleanTab(
+            title: tab.savedTitle ?? item.title ?? "New Tab",
+            urlString: url,
+            id: item.id,
+            parentID: parent
+        )
     }
-
-    var result = Result(
-        cleanSpaces: cleanSpaces,
-        cleanTabs: cleanTabs
-    )
-    for tid in topIds {
-        result.favs.insert(tid)
+    for item in items where isUserFolder(item) {
+        guard let index = owningSpace(startingAt: item.id) else { continue }
+        spaces[index].folders.append(CleanFolder(
+            id: item.id,
+            parentID: item.parentID,
+            title: item.title ?? "Folder"
+        ))
     }
-
-    return result
+    for tab in tabs {
+        guard let index = owningSpace(startingAt: tab.parentID) else { continue }
+        spaces[index].tabs.append(tab)
+    }
+    // Arc's childrenIds preserve folder order, including empty folders.
+    for index in spaces.indices {
+        let foldersByID = Dictionary(uniqueKeysWithValues: spaces[index].folders.map { ($0.id, $0) })
+        var ordered: [CleanFolder] = []
+        var visited: Set<String> = []
+        func append(_ id: String) {
+            guard let folder = foldersByID[id], visited.insert(id).inserted else { return }
+            ordered.append(folder)
+            for child in itemsByID[id]?.childrenIds ?? [] {
+                append(child)
+            }
+        }
+        for id in spaces[index].containerIDs.sorted() {
+            for child in itemsByID[id]?.childrenIds ?? [] {
+                append(child)
+            }
+        }
+        for folder in spaces[index].folders {
+            append(folder.id)
+        }
+        spaces[index].folders = ordered
+    }
+    return Result(cleanSpaces: spaces, cleanTabs: tabs, favs: favorites)
 }
 
 /// Imports Arc's spaces, tabs, and folders into Ora. Runs on the main actor since it drives
@@ -356,9 +375,11 @@ func importArcData(
     tabManager: TabManager,
     historyManager: HistoryManager,
     downloadManager: DownloadManager,
-    isPrivate: Bool
+    isPrivate: Bool,
+    root sourceRoot: Root? = nil,
+    activateFirstTab: Bool = false
 ) {
-    guard let root = getRoot() else {
+    guard let root = sourceRoot ?? getRoot() else {
         logger.error("Arc import: no root found (StorableSidebar.json missing or undecodable)")
         return
     }
@@ -372,7 +393,8 @@ func importArcData(
             container: container,
             historyManager: historyManager,
             downloadManager: downloadManager,
-            isPrivate: isPrivate
+            isPrivate: isPrivate,
+            activate: false
         )
     }
 
@@ -382,21 +404,24 @@ func importArcData(
         let container = tabManager.createContainer(name: space.title ?? "Unknown", emoji: space.emoji ?? "💀")
         newContainers.append(container)
 
-        let folderedTabIDs = Set(space.folders.flatMap { $0.tabs.map(\.id) })
-        for tab in result.cleanTabs
-            where space.containerIDs.contains(tab.parentID) && !folderedTabIDs.contains(tab.id)
-        {
-            if let newTab = addTab(tab, to: container) {
-                tabManager.togglePinTab(newTab)
+        var foldersByID: [String: Folder] = [:]
+        for sourceFolder in space.folders {
+            let folder = tabManager.createFolder(name: sourceFolder.title, in: container)
+            foldersByID[sourceFolder.id] = folder
+        }
+        for sourceFolder in space.folders {
+            if let folder = foldersByID[sourceFolder.id],
+               let parentID = sourceFolder.parentID, let parent = foldersByID[parentID]
+            {
+                tabManager.moveFolder(folder, toParent: parent)
             }
         }
-
-        for folder in space.folders {
-            let newFolder = tabManager.createFolder(name: folder.title, in: container)
-            for tab in folder.tabs {
-                if let newTab = addTab(tab, to: container) {
-                    tabManager.moveTab(newTab, toFolder: newFolder)
-                }
+        for sourceTab in space.tabs {
+            guard let tab = addTab(sourceTab, to: container) else { continue }
+            // Arc folders are persistent, just like pinned tabs, even when their pages close.
+            tabManager.togglePinTab(tab)
+            if let folder = foldersByID[sourceTab.parentID] {
+                tabManager.moveTab(tab, toFolder: folder)
             }
         }
     }
@@ -412,5 +437,10 @@ func importArcData(
                 tabManager.toggleFavTab(newTab)
             }
         }
+    }
+    if activateFirstTab,
+       let tab = newContainers.first(where: { !$0.tabs.isEmpty })?.tabs.sorted(by: { $0.order > $1.order }).first
+    {
+        tabManager.activateTab(tab)
     }
 }

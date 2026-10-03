@@ -1,11 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// Handles dropping a dragged tab onto a folder header to move it into that folder.
+/// Moves a tab or folder into another folder.
 struct FolderDropDelegate: DropDelegate {
     let folder: Folder
     @Binding var draggedItem: UUID?
     let tabManager: TabManager
+
+    func validateDrop(info: DropInfo) -> Bool {
+        draggedItem != nil && draggedItem != folder.id
+    }
 
     func dropEntered(info: DropInfo) {
         performHapticFeedback(pattern: .alignment)
@@ -34,6 +38,34 @@ struct FolderDropDelegate: DropDelegate {
             }
         }
 
+        draggedItem = nil
+        return true
+    }
+}
+
+/// A dedicated target keeps un-nesting separate from hovering over existing folder rows.
+struct FolderRootDropDelegate: DropDelegate {
+    let container: TabContainer
+    @Binding var draggedItem: UUID?
+    let tabManager: TabManager
+
+    func validateDrop(info: DropInfo) -> Bool {
+        draggedItem != nil
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let id = draggedItem else { return false }
+        if let folder = container.folders.first(where: { $0.id == id }) {
+            tabManager.moveFolder(folder, toParent: nil)
+        } else if let tab = container.tabs.first(where: { $0.id == id }) {
+            tabManager.moveTab(tab, toFolder: nil)
+        } else {
+            return false
+        }
         draggedItem = nil
         return true
     }

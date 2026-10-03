@@ -22,16 +22,8 @@ struct NormalTabsList: View {
     @EnvironmentObject var tabManager: TabManager
     @State private var previousTabIds: [UUID] = []
 
-    private var sortedFolders: [Folder] {
-        folders.sorted { $0.createdAt < $1.createdAt }
-    }
-
     private var ungroupedTabs: [Tab] {
         tabs.filter { $0.folder == nil }
-    }
-
-    private func tabs(in folder: Folder) -> [Tab] {
-        tabs.filter { $0.folder?.id == folder.id }
     }
 
     var body: some View {
@@ -40,10 +32,10 @@ struct NormalTabsList: View {
                 NewTabButton(addNewTab: onAddNewTab)
                 NewFolderButton(container: container)
             }
-            ForEach(sortedFolders) { folder in
+            ForEach(Folder.sidebarOutline(in: folders)) { entry in
                 FolderRow(
-                    folder: folder,
-                    tabs: tabs(in: folder),
+                    folder: entry.folder,
+                    tabs: entry.folder.sidebarTabs(in: container.tabs),
                     draggedItem: $draggedItem,
                     onDrag: onDrag,
                     onSelect: onSelect,
@@ -54,6 +46,7 @@ struct NormalTabsList: View {
                     onMoveToContainer: onMoveToContainer,
                     containers: containers
                 )
+                .padding(.leading, CGFloat(entry.depth) * 16)
             }
             ForEach(ungroupedTabs) { tab in
                 TabItem(
@@ -83,16 +76,15 @@ struct NormalTabsList: View {
                 ))
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: shouldAnimate(tab))
             }
+            Text("Drop here to move out of a folder")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 28)
+                .contentShape(Rectangle())
+                .onDrop(of: [.text], delegate: FolderRootDropDelegate(
+                    container: container, draggedItem: $draggedItem, tabManager: tabManager
+                ))
         }
-        .onDrop(
-            of: [.text],
-            delegate: SectionDropDelegate(
-                items: ungroupedTabs,
-                draggedItem: $draggedItem,
-                targetSection: .normal,
-                tabManager: tabManager
-            )
-        )
         .onAppear {
             previousTabIds = ungroupedTabs.map(\.id)
         }

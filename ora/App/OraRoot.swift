@@ -31,6 +31,7 @@ struct OraRoot: View {
     let historyContext: ModelContext
     let downloadContext: ModelContext
     @State private var window: NSWindow?
+    @State private var arcImportObserver: NSObjectProtocol?
 
     init(isPrivate: Bool = false) {
         _privacyMode = StateObject(wrappedValue: PrivacyMode(isPrivate: isPrivate))
@@ -41,7 +42,6 @@ struct OraRoot: View {
             container = try ModelConfiguration.createOraContainer(isPrivate: isPrivate)
             modelContext = ModelContext(container)
         } catch {
-            deleteSwiftDataStore("OraData.sqlite")
             fatalError("Failed to initialize ModelContainer: \(error)")
         }
 
@@ -255,15 +255,21 @@ struct OraRoot: View {
                     guard note.object as? NSWindow === window ?? NSApp.keyWindow else { return }
                     updateService.checkForUpdates()
                 }
-                NotificationCenter.default.addObserver(forName: .importArcData, object: nil, queue: .main) { note in
-                    Task { @MainActor in
-                        guard note.object as? NSWindow === window ?? NSApp.keyWindow else { return }
-                        importArcData(
-                            tabManager: tabManager,
-                            historyManager: historyManager,
-                            downloadManager: downloadManager,
-                            isPrivate: privacyMode.isPrivate
-                        )
+                if arcImportObserver == nil {
+                    arcImportObserver = NotificationCenter.default.addObserver(
+                        forName: .importArcData,
+                        object: nil,
+                        queue: .main
+                    ) { note in
+                        Task { @MainActor in
+                            guard let window, note.object as? NSWindow === window else { return }
+                            requestArcImport(
+                                tabManager: tabManager,
+                                historyManager: historyManager,
+                                downloadManager: downloadManager,
+                                isPrivate: privacyMode.isPrivate
+                            )
+                        }
                     }
                 }
                 NotificationCenter.default.addObserver(forName: .selectTabAtIndex, object: nil, queue: .main) { note in
@@ -345,6 +351,12 @@ struct OraRoot: View {
                             }
                         }
                     }
+            }
+            .onDisappear {
+                if let arcImportObserver {
+                    NotificationCenter.default.removeObserver(arcImportObserver)
+                    self.arcImportObserver = nil
+                }
             }
     }
 }

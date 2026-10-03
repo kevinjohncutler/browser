@@ -91,13 +91,13 @@ struct ContainerView: View {
     private var favoriteTabs: [Tab] {
         return container.tabs
             .sorted(by: { $0.order > $1.order })
-            .filter { $0.type == .fav }
+            .filter { $0.type == .fav && $0.folder == nil }
     }
 
     private var pinnedTabs: [Tab] {
         return container.tabs
             .sorted(by: { $0.order > $1.order })
-            .filter { $0.type == .pinned }
+            .filter { $0.type == .pinned && $0.folder == nil }
     }
 
     private var normalTabs: [Tab] {
@@ -147,6 +147,7 @@ struct ContainerView: View {
         let provider = TabItemProvider(object: tabId.uuidString as NSString)
         provider.didEnd = {
             draggedItem = nil
+            isDragging = false
         }
         return provider
     }

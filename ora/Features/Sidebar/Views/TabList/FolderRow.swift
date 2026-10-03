@@ -44,7 +44,7 @@ struct FolderRow: View {
                         delegate: TabDropDelegate(
                             item: tab,
                             draggedItem: $draggedItem,
-                            targetSection: .normal,
+                            targetSection: tab.type == .pinned ? .pinned : tab.type == .fav ? .fav : .normal,
                             targetFolder: folder
                         )
                     )
@@ -86,13 +86,36 @@ struct FolderRow: View {
                 tabManager.toggleFolderOpen(folder)
             }
         }
+        .onDrag { onDrag(folder.id) }
         .contextMenu {
+            Button(action: showCreateSubfolderDialog) {
+                Label("New Subfolder", systemImage: "folder.badge.plus")
+            }
             Button(action: showRenameDialog) {
                 Label("Rename Folder", systemImage: "pencil")
+            }
+            if folder.parentFolder != nil {
+                Button(action: { tabManager.moveFolder(folder, toParent: nil) }) {
+                    Label("Move to Top Level", systemImage: "arrow.up.left")
+                }
             }
             Button(role: .destructive, action: { tabManager.deleteFolder(folder) }) {
                 Label("Delete Folder", systemImage: "trash")
             }
+        }
+    }
+
+    private func showCreateSubfolderDialog() {
+        dialogManager.show { id in
+            FolderNameDialog(
+                title: "New Subfolder",
+                initialName: "",
+                dismiss: { dialogManager.dismiss(id: id) },
+                onSave: { name in
+                    tabManager.createFolder(name: name, in: folder.container, parent: folder)
+                    folder.isOpened = true
+                }
+            )
         }
     }
 
