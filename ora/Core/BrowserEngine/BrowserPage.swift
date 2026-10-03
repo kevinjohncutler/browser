@@ -9,6 +9,8 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     private let messageNames: [String]
     private var boostObserver: NSObjectProtocol?
     private var baseUserScripts: [WKUserScript] = []
+    private var passwordRuntime: AnyObject?
+    private var passwordTab: AnyObject?
     private let boostStore: BoostStore
     private var originalURL: URL?
     private(set) var lastCommittedURL: URL?
@@ -22,10 +24,18 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         profile: BrowserEngineProfile,
         configuration: BrowserPageConfiguration,
         delegate: BrowserPageDelegate?,
-        boostStore: BoostStore = .shared
+        boostStore: BoostStore = .shared,
+        passwordExtensions: AnyObject? = nil
     ) {
         self.boostStore = boostStore
         let webConfiguration = WKWebViewConfiguration()
+        if #available(macOS 15.4, *), !profile.isPrivate {
+            let runtime = passwordExtensions as? PasswordExtensionRuntime ??
+                (ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] != "1" ? PasswordExtensionRuntime
+                    .shared : nil)
+            runtime?.configure(webConfiguration, isPrivate: false)
+            passwordRuntime = runtime
+        }
         webConfiguration.applicationNameForUserAgent = configuration.userAgent
         webConfiguration.websiteDataStore = profile.dataStore
         webConfiguration.allowsAirPlayForMediaPlayback = configuration.allowsAirPlayForMediaPlayback
@@ -59,6 +69,12 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         self.delegate = delegate
 
         super.init()
+        if #available(macOS 15.4, *), let runtime = passwordRuntime as? PasswordExtensionRuntime {
+            passwordTab = runtime.attach(webView)
+            if passwordExtensions == nil {
+                runtime.startIfInstalled()
+            }
+        }
 
         for messageName in configuration.scriptMessageNames {
             contentController.add(self, name: messageName)
@@ -208,7 +224,30 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         webView.evaluateJavaScript(boostStore.script(), completionHandler: nil)
     }
 
+    func activatePasswordExtensions() {
+        if #available(macOS 15.4, *), let runtime = passwordRuntime as? PasswordExtensionRuntime,
+           let tab = passwordTab as? PasswordExtensionTab
+        {
+            runtime.activate(tab)
+        }
+    }
+
+    private func updatePasswordExtensionTab() {
+        if #available(macOS 15.4, *), let runtime = passwordRuntime as? PasswordExtensionRuntime,
+           let tab = passwordTab as? PasswordExtensionTab
+        {
+            runtime.changed(tab)
+        }
+    }
+
     func teardown() {
+        if #available(macOS 15.4, *), let runtime = passwordRuntime as? PasswordExtensionRuntime,
+           let tab = passwordTab as? PasswordExtensionTab
+        {
+            runtime.detach(tab)
+        }
+        passwordTab = nil
+        passwordRuntime = nil
         if let boostObserver {
             NotificationCenter.default.removeObserver(boostObserver)
         }
@@ -305,6 +344,7 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        updatePasswordExtensionTab()
         if !isDownloadNavigation {
             originalURL = lastCommittedURL
             emitNavigationEvent(
@@ -318,6 +358,7 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        updatePasswordExtensionTab()
         if !isDownloadNavigation {
             lastCommittedURL = webView.url
             emitNavigationEvent(
@@ -331,6 +372,7 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        updatePasswordExtensionTab()
         if !isDownloadNavigation {
             lastCommittedURL = webView.url
             emitNavigationEvent(

@@ -20,6 +20,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         html = b"<!doctype html><html><head><title>Ora fixture</title></head><body><h1>Fixture</h1><p>Persistent styles</p></body></html>"
+        if self.path == "/login":
+            html = b'<!doctype html><html><head><title>Login fixture</title></head><body><form><input autocomplete="username"><input type="password" autocomplete="current-password"></form></body></html>'
         if self.path == "/styled":
             html = html.replace(
                 b"</head>",

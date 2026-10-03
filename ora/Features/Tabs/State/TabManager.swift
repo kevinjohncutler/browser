@@ -39,7 +39,10 @@ private struct ClosedTabSnapshot {
 // swiftlint:disable:next type_body_length
 class TabManager: ObservableObject {
     @Published var activeContainer: TabContainer?
-    @Published var activeTab: Tab?
+    @Published var activeTab: Tab? {
+        didSet { activeTab?.browserPage?.activatePasswordExtensions() }
+    }
+
     let modelContainer: ModelContainer
     let modelContext: ModelContext
     let mediaController: MediaController

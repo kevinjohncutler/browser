@@ -44,7 +44,7 @@ final class PasswordManagerProviderRegistry {
         PasswordManagerProviderDescriptor(
             kind: .applePasswords,
             title: "Apple Passwords",
-            summary: "Automatic Apple Passwords filling is not implemented. The Passwords command opens Apple's app.",
+            summary: "Apple's extension handles password suggestions and filling. macOS browser authorization is required.",
             vaultStoredInOra: false,
             autofillMode: .nativeProviderOverlay,
             isAvailable: false

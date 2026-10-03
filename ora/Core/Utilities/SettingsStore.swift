@@ -242,7 +242,21 @@ class SettingsStore: ObservableObject {
     }
 
     @Published var passwordManagerProvider: PasswordManagerProviderKind {
-        didSet { defaults.set(passwordManagerProvider.rawValue, forKey: passwordManagerProviderKey) }
+        didSet {
+            defaults.set(passwordManagerProvider.rawValue, forKey: passwordManagerProviderKey)
+            if #available(macOS 15.4, *), ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] != "1" {
+                Task { @MainActor in
+                    if self
+                        .passwordManagerProvider ==
+                        .applePasswords
+                    {
+                        PasswordExtensionRuntime.shared.startIfInstalled()
+                    } else {
+                        PasswordExtensionRuntime.shared.shutdown()
+                    }
+                }
+            }
+        }
     }
 
     @Published var passwordAutofillEnabled: Bool {

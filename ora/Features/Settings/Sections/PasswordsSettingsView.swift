@@ -119,7 +119,7 @@ struct PasswordsSettingsView: View {
 
             if selectedProvider.kind == .applePasswords {
                 Text(
-                    "This build cannot request Apple Passwords when a webpage login field is focused. Opening the Passwords app does not enable automatic filling."
+                    "Apple Passwords needs an installed extension and macOS authorization for this browser. The connection status below reports whether the helper is available."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -139,7 +139,7 @@ struct PasswordsSettingsView: View {
                     .disabled(!settings.passwordsEnabled || !selectedProvider.usesBuiltInVault)
             }
 
-            if !selectedProvider.isAvailable {
+            if !selectedProvider.isAvailable, selectedProvider.kind != .applePasswords {
                 Text("\(selectedProvider.title) is not yet integrated.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -171,6 +171,9 @@ struct PasswordsSettingsView: View {
                 }
 
                 if selectedProvider.kind == .applePasswords {
+                    if #available(macOS 15.4, *) {
+                        ApplePasswordsExtensionSettings()
+                    }
                     Text("Manage saved passwords, passkeys, and verification codes in Apple Passwords.")
                         .foregroundStyle(.secondary)
                     Button("Open Apple Passwords") {

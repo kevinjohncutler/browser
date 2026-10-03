@@ -249,6 +249,11 @@ class Tab: ObservableObject, Identifiable {
             delegate: nil
         )
         browserPage = page
+        Task { @MainActor [weak self] in
+            if let self, tabManager.activeTab === self, self.browserPage === page {
+                page.activatePasswordExtensions()
+            }
+        }
 
         self.historyManager = historyManager
         self.downloadManager = downloadManager

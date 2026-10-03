@@ -73,6 +73,32 @@ class AppState: ObservableObject {
 enum OraEntryPoint {
     @MainActor static func main() {
         #if DEBUG
+            if ProcessInfo.processInfo.environment["ORA_PASSWORD_HELPER_PROBE"] == "1" {
+                let application = NSApplication.shared
+                application.setActivationPolicy(.prohibited)
+                Task { @MainActor in
+                    let connection = NativePasswordMessaging()
+                    var result: String?
+                    connection
+                        .onDisconnect = { error in result = error?.localizedDescription ?? "Helper closed normally." }
+                    do { try connection.start() } catch { result = error.localizedDescription }
+                    for _ in 0 ..< 120 {
+                        if result != nil {
+                            break
+                        }
+                        try? await Task.sleep(nanoseconds: 25_000_000)
+                    }
+                    print(result ?? "Helper remained alive. No credential request was sent.")
+                    if #available(macOS 15.4, *) {
+                        print(PasswordExtensionRuntime.installationDirectory.path)
+                    }
+                    connection.close()
+                    fflush(stdout)
+                    exit(0)
+                }
+                application.run()
+                return
+            }
             if ProcessInfo.processInfo.environment["ORA_CSS_DIAGNOSTICS"] == "1" {
                 print(BoostStore.shared.directory.path)
                 return
