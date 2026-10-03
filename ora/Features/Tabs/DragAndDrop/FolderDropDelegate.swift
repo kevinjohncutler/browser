@@ -20,25 +20,23 @@ struct FolderDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard let provider = info.itemProviders(for: [.text]).first else { return false }
+        completeDrop()
+    }
 
-        provider.loadObject(ofClass: NSString.self) { object, _ in
-            guard let string = object as? String, let uuid = UUID(uuidString: string) else { return }
-
-            DispatchQueue.main.async {
-                if let tab = folder.container.tabs.first(where: { $0.id == uuid }) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        tabManager.moveTab(tab, toFolder: folder)
-                    }
-                } else if let draggedFolder = folder.container.folders.first(where: { $0.id == uuid }) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        tabManager.moveFolder(draggedFolder, toParent: folder)
-                    }
-                }
+    /// Internal drags carry their identity in the shared binding. This also supports offscreen tests.
+    func completeDrop() -> Bool {
+        guard let id = draggedItem else { return false }
+        defer { draggedItem = nil }
+        if let tab = folder.container.tabs.first(where: { $0.id == id }) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                tabManager.moveTab(tab, toFolder: folder)
             }
+        } else if let source = folder.container.folders.first(where: { $0.id == id }) {
+            tabManager.moveFolder(source, toParent: folder)
+            return source.parentFolder?.id == folder.id
+        } else {
+            return false
         }
-
-        draggedItem = nil
         return true
     }
 }
@@ -58,7 +56,12 @@ struct FolderRootDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        completeDrop()
+    }
+
+    func completeDrop() -> Bool {
         guard let id = draggedItem else { return false }
+        defer { draggedItem = nil }
         if let folder = container.folders.first(where: { $0.id == id }) {
             tabManager.moveFolder(folder, toParent: nil)
         } else if let tab = container.tabs.first(where: { $0.id == id }) {
@@ -66,7 +69,6 @@ struct FolderRootDropDelegate: DropDelegate {
         } else {
             return false
         }
-        draggedItem = nil
         return true
     }
 }

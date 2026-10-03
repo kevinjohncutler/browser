@@ -26,8 +26,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func getWindow() -> NSWindow? {
-        if let key = NSApp.keyWindow { return key }
-        if let visible = NSApp.windows.first(where: { $0.isVisible }) { return visible }
+        if let key = NSApp.keyWindow {
+            return key
+        }
+        if let visible = NSApp.windows.first(where: { $0.isVisible }) {
+            return visible
+        }
         if let any = NSApp.windows.first {
             any.makeKeyAndOrderFront(nil)
             return any
@@ -66,6 +70,20 @@ class AppState: ObservableObject {
 }
 
 @main
+enum OraEntryPoint {
+    @MainActor static func main() {
+        #if DEBUG
+            if ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] == "1" {
+                let application = NSApplication.shared
+                application.setActivationPolicy(.prohibited)
+                application.run()
+                return
+            }
+        #endif
+        OraApp.main()
+    }
+}
+
 struct OraApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 

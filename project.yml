@@ -170,6 +170,8 @@ schemes:
       config: Debug
     test:
       config: Debug
+      environmentVariables:
+        ORA_HEADLESS_TESTING: "1"
       targets:
         - oraTests
     profile:

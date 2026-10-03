@@ -197,6 +197,49 @@ struct ImporterTests {
         #expect(Folder.sidebarOutline(in: space.folders).map(\.depth) == [0, 1, 2, 1])
     }
 
+    @Test func headlessHostHasNoWindows() {
+        if ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] == "1" {
+            #expect(NSApplication.shared.activationPolicy() == .prohibited)
+            #expect(NSApplication.shared.windows.isEmpty)
+        }
+    }
+
+    @Test func completesActualFolderDropHandlersHeadlessly() throws {
+        let manager = try Self.makeManager()
+        let space = try #require(manager.activeContainer)
+        let parent = manager.createFolder(name: "Parent", in: space)
+        let child = manager.createFolder(name: "Child", in: space)
+        let tab = try manager.addTab(
+            url: #require(URL(string: "about:blank")),
+            container: space,
+            isPrivate: false,
+            activate: false
+        )
+        var dragged: UUID? = child.id
+        let binding = Binding<UUID?>(get: { dragged }, set: { dragged = $0 })
+        let folderDrop = FolderDropDelegate(folder: parent, draggedItem: binding, tabManager: manager)
+        #expect(folderDrop.completeDrop())
+        #expect(child.parentFolder?.id == parent.id)
+        #expect(dragged == nil)
+        dragged = parent.id
+        let cycleDrop = FolderDropDelegate(folder: child, draggedItem: binding, tabManager: manager)
+        #expect(!cycleDrop.completeDrop())
+        #expect(parent.parentFolder == nil)
+        dragged = tab.id
+        #expect(folderDrop.completeDrop())
+        #expect(parent.sidebarTabs(in: space.tabs).map(\.id) == [tab.id])
+        let rootDrop = FolderRootDropDelegate(container: space, draggedItem: binding, tabManager: manager)
+        dragged = child.id
+        #expect(rootDrop.completeDrop())
+        #expect(child.parentFolder == nil)
+        dragged = tab.id
+        #expect(rootDrop.completeDrop())
+        #expect(tab.folder == nil)
+        dragged = UUID()
+        #expect(!folderDrop.completeDrop())
+        #expect(dragged == nil)
+    }
+
     @Test func rendersOptionalFolderSidebarPreview() throws {
         guard let path = ProcessInfo.processInfo.environment["ORA_PREVIEW_DIRECTORY"] else { return }
         let manager = try Self.makeManager()
