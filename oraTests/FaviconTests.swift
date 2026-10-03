@@ -155,7 +155,7 @@ struct FaviconTests {
         let center = try #require(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?
             .usingColorSpace(.deviceRGB))
         #expect(center.redComponent > center.greenComponent + 0.4)
-        #expect(NSApplication.shared.windows.isEmpty)
+        #expect(HeadlessTestHost.hasNoAppWindows)
         if let path = ProcessInfo.processInfo.environment["ORA_PREVIEW_DIRECTORY"] {
             let png = try #require(bitmap.representation(using: .png, properties: [:]))
             try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)

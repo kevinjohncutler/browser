@@ -7,6 +7,9 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     private let webView: WKWebView
     private let messageNames: [String]
+    private var boostObserver: NSObjectProtocol?
+    private var baseUserScripts: [WKUserScript] = []
+    private let boostStore: BoostStore
     private var originalURL: URL?
     private(set) var lastCommittedURL: URL?
     private(set) var isDownloadNavigation = false
@@ -18,8 +21,10 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     init(
         profile: BrowserEngineProfile,
         configuration: BrowserPageConfiguration,
-        delegate: BrowserPageDelegate?
+        delegate: BrowserPageDelegate?,
+        boostStore: BoostStore = .shared
     ) {
+        self.boostStore = boostStore
         let webConfiguration = WKWebViewConfiguration()
         webConfiguration.applicationNameForUserAgent = configuration.userAgent
         webConfiguration.websiteDataStore = profile.dataStore
@@ -64,9 +69,27 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
                 injectionTime: mapInjectionTime(script.injectionTime),
                 forMainFrameOnly: script.forMainFrameOnly
             )
+            baseUserScripts.append(userScript)
             contentController.addUserScript(userScript)
         }
 
+        let backgroundScript = WKUserScript(
+            source: BoostStore.defaultBackgroundScript,
+            injectionTime: .atDocumentStart, forMainFrameOnly: false
+        )
+        baseUserScripts.append(backgroundScript)
+        contentController.addUserScript(backgroundScript)
+        let boostScript = WKUserScript(
+            source: boostStore.script(), injectionTime: .atDocumentStart, forMainFrameOnly: true
+        )
+        contentController.addUserScript(boostScript)
+        boostObserver = NotificationCenter.default.addObserver(
+            forName: .cssBoostsChanged, object: boostStore, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshBoosts() }
+        }
+        webView.underPageBackgroundColor = NSColor(white: 0.09, alpha: 1)
+        webView.setValue(false, forKey: "drawsBackground")
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsMagnification = true
@@ -74,7 +97,8 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         webView.wantsLayer = true
         webView.isInspectable = configuration.allowsInspectableDebugging
         if let layer = webView.layer {
-            layer.isOpaque = true
+            layer.backgroundColor = NSColor(white: 0.09, alpha: 1).cgColor
+            layer.isOpaque = false
             layer.drawsAsynchronously = true
         }
 
@@ -171,7 +195,24 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         webView.closeAllMediaPresentations(completionHandler: completion)
     }
 
+    private func refreshBoosts() {
+        let controller = webView.configuration.userContentController
+        controller.removeAllUserScripts()
+        for script in baseUserScripts {
+            controller.addUserScript(script)
+        }
+        let script = WKUserScript(
+            source: boostStore.script(), injectionTime: .atDocumentStart, forMainFrameOnly: true
+        )
+        controller.addUserScript(script)
+        webView.evaluateJavaScript(boostStore.script(), completionHandler: nil)
+    }
+
     func teardown() {
+        if let boostObserver {
+            NotificationCenter.default.removeObserver(boostObserver)
+        }
+        boostObserver = nil
         webView.stopLoading()
         webView.navigationDelegate = nil
         webView.uiDelegate = nil

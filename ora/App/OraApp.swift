@@ -73,6 +73,10 @@ class AppState: ObservableObject {
 enum OraEntryPoint {
     @MainActor static func main() {
         #if DEBUG
+            if ProcessInfo.processInfo.environment["ORA_CSS_DIAGNOSTICS"] == "1" {
+                print(BoostStore.shared.directory.path)
+                return
+            }
             if ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] == "1" {
                 let application = NSApplication.shared
                 application.setActivationPolicy(.prohibited)

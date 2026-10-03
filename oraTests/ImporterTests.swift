@@ -200,7 +200,7 @@ struct ImporterTests {
     @Test func headlessHostHasNoWindows() {
         if ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] == "1" {
             #expect(NSApplication.shared.activationPolicy() == .prohibited)
-            #expect(NSApplication.shared.windows.isEmpty)
+            #expect(HeadlessTestHost.hasNoAppWindows)
         }
     }
 

@@ -6,10 +6,12 @@ enum SettingsTab: String, Hashable, CaseIterable {
     case spaces
     case passwords
     case shortcuts
+    case boosts
     case searchEngines
 
     var title: String {
         switch self {
+        case .boosts: return "CSS Boosts"
         case .general: return "General"
         case .spaces: return "Spaces"
         case .passwords: return "Passwords"
@@ -20,6 +22,7 @@ enum SettingsTab: String, Hashable, CaseIterable {
 
     var symbol: String {
         switch self {
+        case .boosts: return "paintbrush"
         case .general: return "gearshape"
         case .spaces: return "rectangle.3.group"
         case .passwords: return "key.horizontal"
@@ -30,6 +33,8 @@ enum SettingsTab: String, Hashable, CaseIterable {
 
     var subtitle: String {
         switch self {
+        case .boosts:
+            return "Persistent website styles and Claude integration."
         case .general:
             return "Browser defaults, app behavior, and software updates."
         case .spaces:
@@ -86,6 +91,8 @@ struct SettingsContentView: View {
     @ViewBuilder
     private var detailView: some View {
         switch selectedTab {
+        case .boosts:
+            BoostsSettingsView()
         case .general:
             GeneralSettingsView()
         case .spaces:

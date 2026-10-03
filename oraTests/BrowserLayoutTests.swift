@@ -44,7 +44,7 @@ struct BrowserLayoutTests {
             host.cacheDisplay(in: host.bounds, to: bitmap)
             let data = try #require(bitmap.representation(using: .png, properties: [:]))
             #expect(data.count > 1000)
-            #expect(NSApplication.shared.windows.isEmpty)
+            #expect(HeadlessTestHost.hasNoAppWindows)
             if let path = ProcessInfo.processInfo.environment["ORA_PREVIEW_DIRECTORY"] {
                 let directory = URL(fileURLWithPath: path)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -52,6 +52,16 @@ struct BrowserLayoutTests {
                     scheme == .dark ? "address-sidebar-dark.png" : "address-sidebar-light.png"
                 ))
             }
+        }
+    }
+}
+
+@MainActor
+enum HeadlessTestHost {
+    static var hasNoAppWindows: Bool {
+        // WebKit creates an invisible text input helper when used offscreen.
+        NSApplication.shared.windows.allSatisfy {
+            !$0.isVisible && String(describing: type(of: $0)) == "TUINSWindow"
         }
     }
 }

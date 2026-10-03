@@ -4,6 +4,7 @@ import SwiftUI
 
 struct BrowserView: View {
     @Environment(\.theme) var theme
+    @Environment(\.window) private var window: NSWindow?
     @EnvironmentObject var tabManager: TabManager
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var downloadManager: DownloadManager
@@ -57,6 +58,16 @@ struct BrowserView: View {
         } else {
             activeTab.evaluateJavaScript(Self.removeShieldJS)
         }
+    }
+
+    private func publishActivePage() {
+        if let window, NSApp.keyWindow != window {
+            return
+        }
+        BoostStore.shared.publishActivePage(
+            url: tabManager.activeTab?.url, title: tabManager.activeTab?.title,
+            isPrivate: privacyMode.isPrivate || tabManager.activeTab?.isPrivate == true
+        )
     }
 
     var body: some View {
@@ -119,6 +130,7 @@ struct BrowserView: View {
             }
         }
         .onChange(of: tabManager.activeTab) { oldTab, newTab in
+            publishActivePage()
             if showFloatingSidebar {
                 oldTab?.evaluateJavaScript(Self.removeShieldJS)
                 injectSidebarMouseShield(visible: true)
@@ -134,7 +146,16 @@ struct BrowserView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+            if let target = notification.object as? NSWindow, target === window {
+                publishActivePage()
+            }
+        }
+        .onChange(of: tabManager.activeTab?.urlString) { _, _ in publishActivePage() }
+        .onChange(of: tabManager.activeTab?.title) { _, _ in publishActivePage() }
+        .onChange(of: privacyMode.isPrivate) { _, _ in publishActivePage() }
         .onAppear {
+            publishActivePage()
             if let tab = tabManager.activeTab, !tab.isWebViewReady {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     tab.restoreTransientState(
