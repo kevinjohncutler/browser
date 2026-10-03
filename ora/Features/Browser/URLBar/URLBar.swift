@@ -257,7 +257,7 @@ struct URLBar: View {
             .padding(4)
             .background(
                 Rectangle()
-                    .fill(isInSidebar ? theme.subtleWindowBackgroundColor : tab.backgroundColor)
+                    .fill(isInSidebar ? Color.clear : tab.backgroundColor)
             )
             .animation(.easeOut(duration: 0.25), value: isEditing)
             // Hidden button for keyboard shortcut

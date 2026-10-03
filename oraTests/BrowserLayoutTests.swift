@@ -42,6 +42,14 @@ struct BrowserLayoutTests {
             host.layoutSubtreeIfNeeded()
             let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
             host.cacheDisplay(in: host.bounds, to: bitmap)
+            let scale = CGFloat(bitmap.pixelsHigh) / host.bounds.height
+            let rowBackground = try #require(bitmap.colorAt(x: Int(20 * scale), y: Int(40 * scale))?
+                .usingColorSpace(.deviceRGB))
+            let sidebarBackground = try #require(bitmap.colorAt(x: Int(20 * scale), y: Int(210 * scale))?
+                .usingColorSpace(.deviceRGB))
+            #expect(abs(rowBackground.redComponent - sidebarBackground.redComponent) < 0.02)
+            #expect(abs(rowBackground.greenComponent - sidebarBackground.greenComponent) < 0.02)
+            #expect(abs(rowBackground.blueComponent - sidebarBackground.blueComponent) < 0.02)
             let data = try #require(bitmap.representation(using: .png, properties: [:]))
             #expect(data.count > 1000)
             #expect(HeadlessTestHost.hasNoAppWindows)
