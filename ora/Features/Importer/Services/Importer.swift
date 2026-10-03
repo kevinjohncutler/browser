@@ -1,5 +1,6 @@
 import Darwin
 import os.log
+import SwiftData
 import SwiftUI
 
 private let logger = Logger(subsystem: "com.orabrowser.ora", category: "Importer")
@@ -55,6 +56,17 @@ enum SpaceItem: Decodable {
         // swiftlint:disable:next identifier_name
         let emoji_v2: String?
         let emoji: Int?
+        let icon: String?
+
+        var displayEmoji: String? {
+            if let value = emoji_v2, !value.isEmpty {
+                return value
+            }
+            if let emoji, let scalar = UnicodeScalar(emoji) {
+                return String(scalar)
+            }
+            return ["star": "⭐️", "flash": "⚡️", "planet": "🪐"][icon ?? ""]
+        }
     }
 
     init(from decoder: Decoder) throws {
@@ -213,12 +225,13 @@ func requestArcImport(
     tabManager: TabManager,
     historyManager: HistoryManager,
     downloadManager: DownloadManager,
-    isPrivate: Bool
+    isPrivate: Bool,
+    iconsOnly: Bool = false
 ) {
     let panel = NSOpenPanel()
     panel.title = "Import Arc Tabs and Folders"
     panel.message = "Select Arc's StorableSidebar.json file."
-    panel.prompt = "Import"
+    panel.prompt = iconsOnly ? "Update Icons" : "Import"
     panel.canChooseDirectories = false
     panel.allowsMultipleSelection = false
     panel.showsHiddenFiles = true
@@ -238,6 +251,10 @@ func requestArcImport(
             alert.runModal()
             return
         }
+        if iconsOnly {
+            updateImportedSpaceIcons(from: root, tabManager: tabManager)
+            return
+        }
         importArcData(
             tabManager: tabManager,
             historyManager: historyManager,
@@ -247,6 +264,18 @@ func requestArcImport(
             activateFirstTab: true
         )
     }
+}
+
+@MainActor
+func updateImportedSpaceIcons(from root: Root, tabManager: TabManager) {
+    let spaces = inspectItems(root).cleanSpaces
+    let containers = (try? tabManager.modelContext.fetch(FetchDescriptor<TabContainer>())) ?? []
+    for container in containers where container.emoji == "💀" {
+        if let source = spaces.first(where: { $0.title == container.name }), let emoji = source.emoji {
+            container.emoji = emoji
+        }
+    }
+    try? tabManager.modelContext.save()
 }
 
 struct CleanTab {
@@ -293,7 +322,7 @@ func inspectItems(_ root: Root) -> Result {
         for entry in container.spaces ?? [] {
             if case let .custom(space) = entry {
                 spaces.append(CleanSpace(
-                    emoji: space.customInfo.iconType.emoji_v2,
+                    emoji: space.customInfo.iconType.displayEmoji,
                     title: space.title,
                     containerIDs: Set(space.containerIDs + [space.id])
                 ))
@@ -410,7 +439,7 @@ func importArcData(
     var newContainers: [TabContainer] = []
 
     for space in result.cleanSpaces {
-        let container = tabManager.createContainer(name: space.title ?? "Unknown", emoji: space.emoji ?? "💀")
+        let container = tabManager.createContainer(name: space.title ?? "Unknown", emoji: space.emoji ?? "◦")
         newContainers.append(container)
 
         var foldersByID: [String: Folder] = [:]

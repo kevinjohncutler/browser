@@ -10,6 +10,11 @@ struct ImportDataButton: View {
             Button("Arc") {
                 NotificationCenter.default.post(name: .importArcData, object: NSApp.keyWindow)
             }
+            Button("Update Arc Space Icons") {
+                NotificationCenter.default.post(
+                    name: .importArcData, object: NSApp.keyWindow, userInfo: ["iconsOnly": true]
+                )
+            }
             Button("Safari") {
                 // importSafari()
             }

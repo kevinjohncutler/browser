@@ -4,39 +4,28 @@ import SwiftUI
 struct LocalFavIcon: View {
     let faviconLocalFile: URL?
     let textColor: Color
+    var size: CGFloat = 16
 
-    @State private var image: NSImage?
-
-    var body: some View {
-        if let image {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 16, height: 16)
-                .cornerRadius(4)
-                .grayscale(1.0)
-        } else {
-            Image(systemName: "globe")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 16, height: 16)
-                .foregroundColor(textColor)
-                .onAppear(perform: loadFavicon)
-        }
+    private var image: NSImage? {
+        guard let url = faviconLocalFile else { return nil }
+        return NSImage(contentsOf: url)
     }
 
-    private func loadFavicon() {
-        guard let localURL = faviconLocalFile,
-              FileManager.default.fileExists(atPath: localURL.path) else { return }
-
-        // Loading may block briefly, so you can even do it async if needed
-        DispatchQueue.global(qos: .utility).async {
-            if let loadedImage = NSImage(contentsOfFile: localURL.path) {
-                DispatchQueue.main.async {
-                    self.image = loadedImage
-                }
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: "globe")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundColor(textColor)
             }
         }
+        .frame(width: size, height: size)
+        .cornerRadius(4)
     }
 }
 
@@ -49,26 +38,7 @@ struct FavIcon: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if let favicon, isWebViewReady {
-                AsyncImage(
-                    url: favicon
-                ) { image in
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 16, height: 16)
-                } placeholder: {
-                    LocalFavIcon(
-                        faviconLocalFile: faviconLocalFile,
-                        textColor: textColor
-                    )
-                }
-            } else {
-                LocalFavIcon(
-                    faviconLocalFile: faviconLocalFile,
-                    textColor: textColor
-                )
-            }
+            LocalFavIcon(faviconLocalFile: faviconLocalFile, textColor: textColor)
 
             if isPlayingMedia {
                 Image(systemName: "speaker.wave.2.fill")
@@ -116,6 +86,7 @@ struct TabItem: View {
             actionButton
         }
         .onAppear {
+            tab.ensureFavicon()
             if tabManager.isActive(tab) {
                 tab
                     .restoreTransientState(

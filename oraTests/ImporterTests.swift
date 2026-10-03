@@ -254,6 +254,12 @@ struct ImporterTests {
             .first { $0.name == "Test Space" })
         let directory = URL(fileURLWithPath: path)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let (_, iconData) = try FaviconTests.coloredIcon()
+        let iconFile = directory.appendingPathComponent("fixture-icon.png")
+        try iconData.write(to: iconFile)
+        for tab in space.tabs {
+            tab.faviconLocalFile = iconFile
+        }
         for scheme in [ColorScheme.light, .dark] {
             let sidebar = NormalTabsList(
                 tabs: space.tabs.filter { $0.type == .normal }, folders: space.folders, container: space,

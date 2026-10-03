@@ -43,6 +43,7 @@ class Tab: ObservableObject, Identifiable {
     @Transient var pageDelegate: TabBrowserPageDelegate?
     @Transient @Published var isWebViewReady: Bool = false
     @Transient @Published var loadingProgress: Double = 10.0
+    @Transient var isFetchingFavicon = false
     @Transient var colorUpdated = false
     @Transient var maybeIsActive = false
     @Transient @Published var hasNavigationError: Bool = false
@@ -109,27 +110,37 @@ class Tab: ObservableObject, Identifiable {
         backgroundColorHex = color.toHex() ?? "#000000"
     }
 
-    func setFavicon() {
+    func ensureFavicon(using service: FaviconService = .shared) {
+        if let file = faviconLocalFile, FileManager.default.fileExists(atPath: file.path) {
+            return
+        }
+        setFavicon(using: service)
+    }
+
+    func setFavicon(using service: FaviconService = .shared) {
+        guard !isFetchingFavicon else { return }
         guard let host = self.url.host else { return }
 
         let domain = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-        guard let faviconURL = FaviconService.shared.faviconURL(for: domain) else { return }
+        guard let faviconURL = service.faviconURL(for: domain) else { return }
         self.favicon = faviconURL
+        isFetchingFavicon = true
 
         let fileName = "\(self.id.uuidString).png"
         let saveURL = FileManager.default.faviconDirectory.appendingPathComponent(fileName)
 
-        FaviconService.shared
+        service
             .downloadAndSaveFavicon(for: domain, faviconURL: faviconURL, to: saveURL) {
                 [weak self] sourceURL, success in
                 guard let self else { return }
-                if success {
-                    Task { @MainActor in
-                        self.faviconLocalFile = saveURL
-                        if let sourceURL {
-                            self.favicon = sourceURL
-                        }
+                Task { @MainActor in
+                    self.isFetchingFavicon = false
+                    guard success, self.url.host == host else { return }
+                    self.faviconLocalFile = saveURL
+                    if let sourceURL {
+                        self.favicon = sourceURL
                     }
+                    try? self.modelContext?.save()
                 }
             }
     }

@@ -4,7 +4,16 @@ import FaviconFinder
 import SwiftUI
 
 final class FaviconService: ObservableObject {
+    typealias Payload = (image: NSImage, data: Data, sourceURL: URL)
     static let shared = FaviconService()
+    private let fetcher: ((String) async -> Payload?)?
+    private var dataCache: [String: Data] = [:]
+    private var retryAfter: [String: Date] = [:]
+
+    init(fetcher: ((String) async -> Payload?)? = nil) {
+        self.fetcher = fetcher
+    }
+
     private var cache: [String: NSImage] = [:]
     private var colorCache: [String: Color] = [:]
     private var sourceURLCache: [String: URL] = [:]
@@ -95,6 +104,11 @@ final class FaviconService: ObservableObject {
             return
         }
 
+        if let retry = retryAfter[domain], retry > Date() {
+            completion?(nil)
+            return
+        }
+
         if let completion {
             pendingCompletions[domain, default: []].append(completion)
         }
@@ -109,21 +123,26 @@ final class FaviconService: ObservableObject {
                 self.completeFetch(
                     for: domain,
                     favicon: payload?.image,
-                    sourceURL: payload?.sourceURL
+                    sourceURL: payload?.sourceURL,
+                    data: payload?.data
                 )
             }
         }
     }
 
     @MainActor
-    private func completeFetch(for domain: String, favicon: NSImage?, sourceURL: URL?) {
+    private func completeFetch(for domain: String, favicon: NSImage?, sourceURL: URL?, data: Data?) {
         if let favicon {
+            retryAfter[domain] = nil
+            dataCache[domain] = data
             cache[domain] = favicon
             colorCache[domain] = Color(favicon.averageColor())
             if let sourceURL {
                 sourceURLCache[domain] = sourceURL
             }
             objectWillChange.send()
+        } else {
+            retryAfter[domain] = Date().addingTimeInterval(300)
         }
 
         isFetching.remove(domain)
@@ -134,6 +153,9 @@ final class FaviconService: ObservableObject {
     }
 
     private func fetchFaviconPayload(for domain: String) async -> (image: NSImage, data: Data, sourceURL: URL)? {
+        if let fetcher {
+            return await fetcher(domain)
+        }
         guard let siteURL = canonicalURL(for: domain) else { return nil }
 
         do {
@@ -155,39 +177,18 @@ final class FaviconService: ObservableObject {
         completion: @escaping (URL?, Bool) -> Void
     ) {
         let normalizedDomain = normalizeDomain(domain)
-        if let cachedFavicon = cache[normalizedDomain],
-           let data = cachedFavicon.tiffRepresentation
-        {
-            do {
-                try data.write(to: saveURL, options: .atomic)
-                completion(faviconURL(for: normalizedDomain), true)
-            } catch {
-                completion(nil, false)
-            }
-            return
-        }
-
-        Task(priority: .utility) { [weak self] in
-            guard let self else {
+        fetchAndCacheFavicon(for: normalizedDomain) { [weak self] image in
+            guard let self, let image,
+                  let data = self.dataCache[normalizedDomain] ?? image.tiffRepresentation
+            else {
                 completion(nil, false)
                 return
             }
-
-            let payload = await self.fetchFaviconPayload(for: normalizedDomain)
-            await MainActor.run {
-                guard let payload else {
-                    completion(nil, false)
-                    return
-                }
-
-                self.completeFetch(for: normalizedDomain, favicon: payload.image, sourceURL: payload.sourceURL)
-
-                do {
-                    try payload.data.write(to: saveURL, options: .atomic)
-                    completion(payload.sourceURL, true)
-                } catch {
-                    completion(nil, false)
-                }
+            do {
+                try data.write(to: saveURL, options: .atomic)
+                completion(self.faviconURL(for: normalizedDomain), true)
+            } catch {
+                completion(nil, false)
             }
         }
     }

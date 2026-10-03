@@ -267,7 +267,8 @@ struct OraRoot: View {
                                 tabManager: tabManager,
                                 historyManager: historyManager,
                                 downloadManager: downloadManager,
-                                isPrivate: privacyMode.isPrivate
+                                isPrivate: privacyMode.isPrivate,
+                                iconsOnly: note.userInfo?["iconsOnly"] as? Bool == true
                             )
                         }
                     }
