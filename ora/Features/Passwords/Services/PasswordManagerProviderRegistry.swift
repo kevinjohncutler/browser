@@ -44,10 +44,10 @@ final class PasswordManagerProviderRegistry {
         PasswordManagerProviderDescriptor(
             kind: .applePasswords,
             title: "Apple Passwords",
-            summary: "Use macOS AutoFill from a login field's context menu. Passwords stay in iCloud Keychain.",
+            summary: "Automatic Apple Passwords filling is not implemented. The Passwords command opens Apple's app.",
             vaultStoredInOra: false,
             autofillMode: .nativeProviderOverlay,
-            isAvailable: true
+            isAvailable: false
         ),
         PasswordManagerProviderDescriptor(
             kind: .ora,

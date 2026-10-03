@@ -119,7 +119,7 @@ struct PasswordsSettingsView: View {
 
             if selectedProvider.kind == .applePasswords {
                 Text(
-                    "Control-click a login field, then choose AutoFill > Passwords. macOS manages Touch ID and password selection. Ora cannot change Apple's authentication requirements."
+                    "This build cannot request Apple Passwords when a webpage login field is focused. Opening the Passwords app does not enable automatic filling."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
