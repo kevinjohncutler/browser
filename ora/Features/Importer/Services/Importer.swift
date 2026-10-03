@@ -123,12 +123,43 @@ struct ItemContainerData: Decodable {
         let topApps: [String: TopApp]?
 
         struct TopApp: Decodable {
-            let `default`: [String: AnyCodable]?
+            let `default`: AnyCodable?
         }
     }
 }
 
-struct AnyCodable: Decodable {}
+/// Decodes any JSON value without failing. Used for fields we don't consume but whose
+/// shape varies across Arc versions/exports (e.g. a bool where an object might be expected).
+enum AnyCodable: Decodable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    case dictionary([String: AnyCodable])
+    case array([AnyCodable])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Int.self) {
+            self = .int(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .double(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([String: AnyCodable].self) {
+            self = .dictionary(value)
+        } else if let value = try? container.decode([AnyCodable].self) {
+            self = .array(value)
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported JSON value")
+        }
+    }
+}
 
 enum TopAppsContainerID: Decodable {
     case id(String)
