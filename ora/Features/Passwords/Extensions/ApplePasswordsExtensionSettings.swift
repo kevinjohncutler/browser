@@ -9,6 +9,10 @@ struct ApplePasswordsExtensionSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(runtime.status).font(.caption).foregroundStyle(.secondary)
+            Text(
+                "Apple Passwords stays connected as you browse. Google Chrome must be installed as a hidden local helper."
+            )
+            .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("Install Apple Passwords extension") { install() }
                 Button("Unlock Apple Passwords") { runtime.showAction() }

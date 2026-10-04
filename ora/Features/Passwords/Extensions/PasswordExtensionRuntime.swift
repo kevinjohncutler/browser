@@ -14,14 +14,14 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
     @Published private(set) var status = "Apple Passwords extension is not installed."
     private(set) var context: WKWebExtensionContext?
     private var windows: [PasswordExtensionWindow] = []
-    private var connections: [UUID: NativePasswordMessaging] = [:]
+    private var connections: [UUID: any PasswordMessageConnection] = [:]
     private var popup: NSPopover?
     private var loading = false
-    private let makeNativeConnection: () -> NativePasswordMessaging
+    private let makeNativeConnection: () -> any PasswordMessageConnection
 
-    init(persistent: Bool = true, makeNativeConnection: (@MainActor () -> NativePasswordMessaging)? = nil) {
+    init(persistent: Bool = true, makeNativeConnection: (@MainActor () -> any PasswordMessageConnection)? = nil) {
         controller = WKWebExtensionController(configuration: persistent ? .default() : .nonPersistent())
-        self.makeNativeConnection = makeNativeConnection ?? { NativePasswordMessaging() }
+        self.makeNativeConnection = makeNativeConnection ?? { LocalPasswordMessaging() }
         super.init()
         controller.delegate = self
     }

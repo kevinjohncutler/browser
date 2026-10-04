@@ -44,10 +44,10 @@ final class PasswordManagerProviderRegistry {
         PasswordManagerProviderDescriptor(
             kind: .applePasswords,
             title: "Apple Passwords",
-            summary: "Apple's extension handles password suggestions and filling. macOS browser authorization is required.",
+            summary: "Use Apple's password suggestions and filling through a persistent local connection.",
             vaultStoredInOra: false,
             autofillMode: .nativeProviderOverlay,
-            isAvailable: false
+            isAvailable: true
         ),
         PasswordManagerProviderDescriptor(
             kind: .ora,

@@ -37,6 +37,11 @@ targets:
         com.apple.security.temporary-exception.mach-lookup.global-name:
         - $(PRODUCT_BUNDLE_IDENTIFIER)-spks
         - $(PRODUCT_BUNDLE_IDENTIFIER)-spki
+  PasswordBridge:
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.kevinjohncutler.Ora.dev.PasswordBridge
+        DEVELOPMENT_TEAM: ${ORA_DEVELOPMENT_TEAM}
   oraTests:
     settings:
       base:

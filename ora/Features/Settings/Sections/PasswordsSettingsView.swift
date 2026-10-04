@@ -119,7 +119,7 @@ struct PasswordsSettingsView: View {
 
             if selectedProvider.kind == .applePasswords {
                 Text(
-                    "Apple Passwords needs an installed extension and macOS authorization for this browser. The connection status below reports whether the helper is available."
+                    "Apple Passwords uses your existing Apple vault. Install the extension below, then unlock it when prompted. Your connection stays open across tabs and page refreshes."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

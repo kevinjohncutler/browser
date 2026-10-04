@@ -25,11 +25,14 @@ targets:
       - path: ora
         excludes:
           - "Assets/Icons/**"
+      - path: integration/ora-passwords/Shared
     resources:
       - path: ora/Shared/EmojiPicker/emoji-set.json
       - path: ora/Resources
         optional: true
     dependencies:
+      - target: PasswordBridge
+        embed: true
       - package: Sparkle
       - package: Inject
       - package: FaviconFinder
@@ -147,12 +150,36 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: ora-profile-working
           ENABLE_HARDENED_RUNTIME: YES
 
+  PasswordBridge:
+    type: xpc-service
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: integration/ora-passwords/BridgeService
+      - path: integration/ora-passwords/Shared
+    info:
+      path: integration/ora-passwords/BridgeService/Info.plist
+      properties:
+        CFBundlePackageType: XPC!
+        XPCService:
+          ServiceType: Application
+    settings:
+      base:
+        SWIFT_VERSION: 5.9
+        PRODUCT_BUNDLE_IDENTIFIER: com.orabrowser.app.PasswordBridge
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Developer ID Application
+        ENABLE_HARDENED_RUNTIME: true
+        DEVELOPMENT_TEAM: 3Y566D2A4G
+        GENERATE_INFOPLIST_FILE: YES
+
   oraTests:
     type: bundle.unit-test
     platform: "macOS"
     deploymentTarget: "15.0"
     sources:
       - path: oraTests
+      - path: integration/ora-passwords/BridgeService/ChromePasswordTransport.swift
     dependencies:
       - target: ora
     settings:

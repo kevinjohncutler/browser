@@ -44,13 +44,30 @@ struct PasswordExtensionTests {
     }
 
     @Test func realExtensionFocusNativeProcessFillAndRefresh() async throws {
+        try await verifyFocusAndRefresh(useChrome: false)
+    }
+
+    @Test func realWebKitFocusChromeBridgeFillAndRefresh() async throws {
+        try await verifyFocusAndRefresh(useChrome: true)
+    }
+
+    private func verifyFocusAndRefresh(useChrome: Bool) async throws {
         guard #available(macOS 15.4, *), let fixture = ProcessInfo.processInfo.environment["ORA_WEB_FIXTURE_URL"],
               let python = ProcessInfo.processInfo.environment["ORA_PYTHON_PATH"] else { return }
+        var key: String?
+        if useChrome {
+            guard let source = ProcessInfo.processInfo.environment["ORA_APPLE_EXTENSION_PATH"] else { return }
+            let manifest = try #require(JSONSerialization
+                .jsonObject(with: Data(contentsOf: URL(fileURLWithPath: source)
+                        .appendingPathComponent("manifest.json"))) as? [String: Any])
+            key = try #require(manifest["key"] as? String)
+        }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let helper = directory.appendingPathComponent("helper.py")
         try """
+        #!\(python)
         import json, struct, sys
         while True:
             header = sys.stdin.buffer.read(4)
@@ -61,6 +78,7 @@ struct PasswordExtensionTests {
             sys.stdout.buffer.write(struct.pack('<I', len(reply)) + reply)
             sys.stdout.buffer.flush()
         """.write(to: helper, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
         try """
         {"manifest_version":3,"name":"Password test","version":"1.0","permissions":["nativeMessaging"],"host_permissions":["http://127.0.0.1/*"],"background":{"service_worker":"background.js"},"content_scripts":[{"matches":["http://127.0.0.1/*"],"js":["content.js"]}]}
         """.write(to: directory.appendingPathComponent("manifest.json"), atomically: true, encoding: .utf8)
@@ -85,8 +103,14 @@ struct PasswordExtensionTests {
         document.documentElement.dataset.passwordExtension = 'loaded';
         """.write(to: directory.appendingPathComponent("content.js"), atomically: true, encoding: .utf8)
         var launches = 0
-        let runtime = PasswordExtensionRuntime(persistent: false) {
+        var chromeLaunches = 0
+        let runtime = PasswordExtensionRuntime(persistent: false) { () -> any PasswordMessageConnection in
             launches += 1
+            if let key {
+                let transport = ChromePasswordTransport(nativeHostForTesting: helper)
+                transport.onProcessStarted = { chromeLaunches += 1 }
+                return ChromeTestPasswordConnection(transport: transport, publicKey: key)
+            }
             return NativePasswordMessaging(executable: URL(fileURLWithPath: python), arguments: ["-u", helper.path])
         }
         defer { runtime.shutdown() }
@@ -109,6 +133,7 @@ struct PasswordExtensionTests {
                 "synthetic@example.test")
         }
         #expect(launches == 1)
+        #expect(chromeLaunches == (useChrome ? 1 : 0))
         #expect(HeadlessTestHost.hasNoAppWindows)
         let privateConfiguration = WKWebViewConfiguration()
         runtime.configure(privateConfiguration, isPrivate: true)

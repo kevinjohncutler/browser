@@ -73,6 +73,9 @@ class AppState: ObservableObject {
 enum OraEntryPoint {
     @MainActor static func main() {
         #if DEBUG
+            if PasswordBridgeDiagnostics.runIfRequested() {
+                return
+            }
             if ProcessInfo.processInfo.environment["ORA_PASSWORD_HELPER_PROBE"] == "1" {
                 let application = NSApplication.shared
                 application.setActivationPolicy(.prohibited)
