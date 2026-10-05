@@ -16,9 +16,9 @@ scripts/install-apple-passwords.sh "$APPLE_EXTENSION_DIRECTORY"
 
 The same installer is available in Settings > Passwords. It checks the public-key-derived extension identifier and rejects symlinks. This does not authenticate every file of an unpacked extension, so the source must be trusted. Vendor files are not redistributed in this repository.
 
-Select Apple Passwords, then use Unlock Apple Passwords or the Passwords menu command. The extension controls its pairing prompt. Its six-digit pairing challenge has not been replaced with Touch ID. One native connection remains open across tabs and refreshes. Closing Ora ends that helper session, and Apple's own lock or reauthentication requests remain authoritative.
+Apple Passwords is the default provider. Ora opens its unlock prompt automatically after the helper connects and a browser window is ready. Unlock Apple Passwords and the Passwords menu command remain available for retrying. The extension controls its pairing prompt. Its six-digit pairing challenge has not been replaced with Touch ID. One native connection remains open across tabs and refreshes. Closing Ora ends that helper session, and Apple's own lock or reauthentication requests remain authoritative.
 
-The compatibility adapter supplies missing Chromium history events and reports disabled competing autofill services. It preserves the vendor's credential protocol and filling code. Private pages do not receive the extension.
+The compatibility adapter supplies missing Chromium history events, normalizes optional localization arguments, and reports disabled competing autofill services. Embedded completion lists send a checked popup request to the privileged background worker, avoiding a direct action call that WebKit rejects by terminating the page process. See [WebKit action validation](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/Extensions/Cocoa/API/WebExtensionContextAPIActionCocoa.mm). Ora uses WebKit's own popover lifecycle. Existing installations upgrade the adapter at the next extension startup, preserving extension storage. It preserves the vendor's credential protocol and filling code. Private pages do not receive the extension.
 
 ## Validation
 
@@ -26,7 +26,7 @@ The compatibility adapter supplies missing Chromium history events and reports d
 TEST_RUNNER_ORA_APPLE_EXTENSION_PATH="$APPLE_EXTENSION_DIRECTORY" python scripts/test-web-styles.py
 ```
 
-Headless tests exercise the shipped transport through the real signed Chrome application with a synthetic native helper. A real offscreen WebKit login field triggers the extension, forwards through Chrome, and receives and fills a synthetic username and password. Three refreshes reuse one connection and Chrome process. Tests also verify rejected extension identities, ordered responses, fragmented native packets, final replies before disconnection, private-page exclusion, and the installed vendor extension's startup.
+Headless tests exercise the shipped transport through the real signed Chrome application with a synthetic native helper. A real offscreen WebKit login field triggers the extension, forwards through Chrome, and receives and fills a synthetic username and password. Three refreshes reuse one connection and Chrome process. Tests also verify rejected extension identities, ordered responses, fragmented native packets, final replies before disconnection, private-page exclusion, and the installed vendor extension's startup. The actual Apple completion list and popup are exercised with synthetic capability replies: clicking Enable Passwords reaches the six-digit pairing form without crashing the page, startup opens that form once, and three refreshes preserve the connection. Pairing requests are recorded but never forwarded to Apple in these tests. Content process termination reports a retryable navigation error instead of leaving an empty page.
 
 Signed development builds include two bounded probes:
 

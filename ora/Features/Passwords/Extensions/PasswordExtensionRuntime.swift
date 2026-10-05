@@ -17,10 +17,23 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
     private var connections: [UUID: any PasswordMessageConnection] = [:]
     private var popup: NSPopover?
     private var loading = false
+    private var helperReady = false
+    private var startupUnlockPending = false
+    private var startupUnlockTask: Task<Void, Never>?
+    private let automaticallyUnlock: Bool
+    private let popupPresenter: ((WKWebExtension.Action) -> Void)?
     private let makeNativeConnection: () -> any PasswordMessageConnection
 
-    init(persistent: Bool = true, makeNativeConnection: (@MainActor () -> any PasswordMessageConnection)? = nil) {
+    init(
+        persistent: Bool = true,
+        automaticallyUnlock: Bool? = nil,
+        popupPresenter: ((WKWebExtension.Action) -> Void)? = nil,
+        makeNativeConnection: (@MainActor () -> any PasswordMessageConnection)? = nil
+    ) {
         controller = WKWebExtensionController(configuration: persistent ? .default() : .nonPersistent())
+        self.automaticallyUnlock = automaticallyUnlock ??
+            (persistent && ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] != "1")
+        self.popupPresenter = popupPresenter
         self.makeNativeConnection = makeNativeConnection ?? { LocalPasswordMessaging() }
         super.init()
         controller.delegate = self
@@ -46,6 +59,9 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
         if context != nil {
             shutdown()
         }
+        if identifier == NativePasswordMessaging.extensionIdentifier {
+            try ApplePasswordCompatibility.prepare(directory: directory)
+        }
         let webExtension = try await WKWebExtension(resourceBaseURL: directory)
         guard webExtension.manifestVersion == 3 else { throw CocoaError(.fileReadCorruptFile) }
         WKWebExtension.MatchPattern.registerCustomURLScheme("chrome-extension")
@@ -68,6 +84,7 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
         }
         try controller.load(context)
         self.context = context
+        startupUnlockPending = automaticallyUnlock
         for window in windows {
             controller.didOpenWindow(window)
         }
@@ -116,6 +133,7 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
         windows.insert(window, at: 0)
         controller.didFocusWindow(window)
         controller.didActivateTab(tab, previousActiveTab: nil)
+        scheduleStartupUnlock()
     }
 
     func changed(_ tab: PasswordExtensionTab) {
@@ -123,11 +141,36 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
     }
 
     func showAction() {
-        guard let context else { return }
+        guard popup?.isShown != true, let context else { return }
         context.performAction(for: windows.first?.items.first)
     }
 
+    private func scheduleStartupUnlock() {
+        guard startupUnlockPending, helperReady, context != nil, startupUnlockTask == nil else { return }
+        startupUnlockTask = Task { [weak self] in
+            defer { self?.startupUnlockTask = nil }
+            // Tab activation can precede the SwiftUI host attaching its content view to the window.
+            for _ in 0 ..< 200 {
+                guard let self, !Task.isCancelled, startupUnlockPending else { return }
+                if let tab = windows.first?.items.first,
+                   popupPresenter != nil || tab.view?.window?.isVisible == true
+                {
+                    startupUnlockPending = false
+                    showAction()
+                    return
+                }
+                do { try await Task.sleep(nanoseconds: 50_000_000) } catch { return }
+            }
+        }
+    }
+
     func shutdown() {
+        startupUnlockTask?.cancel()
+        startupUnlockTask = nil
+        startupUnlockPending = false
+        helperReady = false
+        popup?.close()
+        popup = nil
         for connection in Array(connections.values) {
             connection.close()
         }
@@ -178,6 +221,10 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
         port.disconnectHandler = { [weak self] _ in self?.connections.removeValue(forKey: id)?.close() }
         connection.onMessage = { [weak self] message in
             self?.status = "Connected to Apple's password helper."
+            if (message as? [String: Any])?["cmd"] as? Int == 14 {
+                self?.helperReady = true
+                self?.scheduleStartupUnlock()
+            }
             port.sendMessage(message) {
                 error in if error != nil {
                     port.disconnect()
@@ -200,8 +247,13 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
         for context: WKWebExtensionContext,
         completionHandler: @escaping (Error?) -> Void
     ) {
+        if let popupPresenter {
+            popupPresenter(action)
+            completionHandler(nil)
+            return
+        }
         guard ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] != "1",
-              let view = action.popupWebView,
+              let popover = action.popupPopover,
               let tab = action.associatedTab as? PasswordExtensionTab,
               let anchor = tab.view, anchor.window != nil
         else {
@@ -212,11 +264,7 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
             ))
             return
         }
-        let host = NSViewController()
-        host.view = view
-        let popover = NSPopover()
-        popover.contentViewController = host
-        popover.contentSize = NSSize(width: 360, height: 400)
+        popup?.close()
         popover.behavior = .transient
         popover.show(
             relativeTo: NSRect(x: 12, y: anchor.bounds.height - 1, width: 1, height: 1),

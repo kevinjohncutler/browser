@@ -151,6 +151,7 @@ struct PasswordExtensionTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         try ApplePasswordExtensionInstaller.install(from: URL(fileURLWithPath: source), to: directory)
         try ApplePasswordExtensionInstaller.install(from: URL(fileURLWithPath: source), to: directory)
+        try ApplePasswordCompatibility.prepare(directory: directory)
         let manifestURL = directory.appendingPathComponent("manifest.json")
         var manifest = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any])
         var scripts = try #require(manifest["content_scripts"] as? [[String: Any]])
@@ -197,6 +198,155 @@ struct PasswordExtensionTests {
         #expect(HeadlessTestHost.hasNoAppWindows)
     }
 
+    @Test func upgradesExistingCompatibilityAdapterWithoutDuplicatingScripts() throws {
+        guard let source = ProcessInfo.processInfo.environment["ORA_APPLE_EXTENSION_PATH"] else { return }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: source), to: directory)
+        let manifestURL = directory.appendingPathComponent("manifest.json")
+        var manifest = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any])
+        manifest["background"] = ["service_worker": "ora_background.js"]
+        var scripts = try #require(manifest["content_scripts"] as? [[String: Any]])
+        for index in scripts.indices {
+            scripts[index]["js"] = ["ora_navigation.js"] + (scripts[index]["js"] as? [String] ?? [])
+        }
+        manifest["content_scripts"] = scripts
+        try JSONSerialization.data(withJSONObject: manifest).write(to: manifestURL)
+        try "old adapter".write(
+            to: directory.appendingPathComponent("ora_background.js"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try ApplePasswordCompatibility.prepare(directory: directory)
+        let first = try Data(contentsOf: manifestURL)
+        try ApplePasswordCompatibility.prepare(directory: directory)
+        #expect(try Data(contentsOf: manifestURL) == first)
+        let upgraded = try #require(JSONSerialization.jsonObject(with: first) as? [String: Any])
+        for entry in try #require(upgraded["content_scripts"] as? [[String: Any]]) {
+            #expect((entry["js"] as? [String])?.filter { $0 == "ora_navigation.js" }.count == 1)
+        }
+        #expect(try String(contentsOf: directory.appendingPathComponent("ora_background.js"), encoding: .utf8)
+            .contains("oraOpenPasswordPopup"))
+    }
+
+    @Test func applePopupStartsPairingOnceAtLaunchAndSurvivesRefreshes() async throws {
+        try await verifyApplePopup(startAutomatically: true)
+    }
+
+    @Test func contentProcessFailureReportsRetryableNavigationError() throws {
+        let delegate = TerminatedPageDelegate()
+        let page = BrowserPage(
+            profile: BrowserEngineProfile(identifier: UUID(), isPrivate: true),
+            configuration: .oraDefault(userScripts: [], privacySettings: SpacePrivacySettings()),
+            delegate: delegate
+        )
+        defer { page.teardown() }
+        let view = try #require(page.contentView as? WKWebView)
+        page.webViewWebContentProcessDidTerminate(view)
+        #expect(delegate.error?.domain == WKError.errorDomain)
+        #expect(delegate.error?.code == WKError.webContentProcessTerminated.rawValue)
+    }
+
+    @Test func embeddedAppleCompletionListOpensPopupWithoutCrashingPage() async throws {
+        try await verifyApplePopup(startAutomatically: false)
+    }
+
+    private func verifyApplePopup(startAutomatically: Bool) async throws {
+        guard #available(macOS 15.4, *),
+              let source = ProcessInfo.processInfo.environment["ORA_APPLE_EXTENSION_PATH"],
+              let fixture = ProcessInfo.processInfo.environment["ORA_WEB_FIXTURE_URL"] else { return }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try ApplePasswordExtensionInstaller.install(from: URL(fileURLWithPath: source), to: directory)
+        if !startAutomatically {
+            let file = directory.appendingPathComponent("completion_list.js")
+            let original = try String(contentsOf: file, encoding: .utf8)
+            try (original + """
+
+            const clickTimer = setInterval(() => {
+              const button = document.querySelector('#needToPairMessageBox');
+              if (!button) return;
+              clearInterval(clickTimer);
+              button.dispatchEvent(new MouseEvent(effectiveClickEvent(), {bubbles:true,button:0}));
+            }, 50);
+            """).write(to: file, atomically: true, encoding: .utf8)
+        }
+        let helper = ApplePopupFixtureConnection()
+        var popupView: WKWebView?
+        var action: WKWebExtension.Action?
+        var presentations = 0
+        let runtime = PasswordExtensionRuntime(
+            persistent: false, automaticallyUnlock: startAutomatically,
+            popupPresenter: {
+                action = $0
+                popupView = $0.popupWebView
+                popupView?.frame = NSRect(x: 0, y: 0, width: 380, height: 210)
+                presentations += 1
+            }, makeNativeConnection: { helper }
+        )
+        defer { action?.closePopup()
+            runtime.shutdown()
+        }
+        try await runtime.load(from: directory)
+        let page = BrowserPage(
+            profile: BrowserEngineProfile(identifier: UUID(), isPrivate: false),
+            configuration: .oraDefault(userScripts: [], privacySettings: SpacePrivacySettings()),
+            delegate: nil, passwordExtensions: runtime
+        )
+        defer { page.teardown() }
+        page.contentView.frame = NSRect(x: 0, y: 0, width: 600, height: 400)
+        page.activatePasswordExtensions()
+        try page.load(URLRequest(url: #require(URL(string: fixture + "/login"))))
+        try await poll(page, "!!document.querySelector('[type=password]')")
+        if !startAutomatically {
+            _ = try await evaluate(page, "document.querySelector('[type=password]').focus()")
+        }
+        for _ in 0 ..< 240 {
+            if popupView != nil, helper.commands.contains(2) {
+                break
+            }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        let view = try #require(popupView)
+        #expect(helper.commands.contains(2))
+        for _ in 0 ..< 120 {
+            if await (try? view
+                .evaluateJavaScript(
+                    "document.querySelector('#divPIN')?.getBoundingClientRect().height > 0"
+                )) as? Bool ==
+                true
+            {
+                break
+            }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        #expect(try await view
+            .evaluateJavaScript("document.querySelector('#divPIN').getBoundingClientRect().height > 0") as? Bool ==
+            true)
+        #expect(try await view
+            .evaluateJavaScript("document.querySelector('#divPINMessage').textContent.length > 0") as? Bool == true)
+        // Offscreen WebKit pauses animation timelines. Finish the vendor's opacity fade before readback.
+        _ = try await view.evaluateJavaScript("document.getAnimations().forEach(animation => animation.finish())")
+        if let path = ProcessInfo.processInfo.environment["ORA_PREVIEW_DIRECTORY"] {
+            let image = try await view.takeSnapshot(configuration: nil)
+            let bitmap = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+            let data = try #require(bitmap.representation(using: .png, properties: [:]))
+            try data.write(to: URL(fileURLWithPath: path).appendingPathComponent(
+                startAutomatically ? "apple-passwords-startup.png" : "apple-passwords-field-popup.png"
+            ))
+        }
+        action?.closePopup()
+        for _ in 0 ..< 3 {
+            page.reload()
+            try await poll(page, "!!document.querySelector('[type=password]')")
+            page.activatePasswordExtensions()
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        #expect(presentations == 1)
+        #expect(helper.starts == 1)
+        #expect(HeadlessTestHost.hasNoAppWindows)
+    }
+
     private func evaluate(_ page: BrowserPage, _ script: String) async throws -> Any? {
         try await withCheckedThrowingContinuation { continuation in
             page.evaluateJavaScript(script) { value, error in
@@ -218,5 +368,44 @@ struct PasswordExtensionTests {
         }
         Issue.record("WebKit did not satisfy the password integration condition: \(condition)")
         throw CocoaError(.fileReadUnknown)
+    }
+}
+
+/// Only synthetic capability replies. Pairing requests are recorded, never forwarded to Apple.
+@MainActor
+private final class ApplePopupFixtureConnection: PasswordMessageConnection {
+    var onMessage: ((Any) -> Void)?
+    var onDisconnect: ((Error?) -> Void)?
+    var commands: [Int] = []
+    var starts = 0
+    func start() throws {
+        starts += 1
+    }
+
+    func send(_ message: Any) throws {
+        guard let command = (message as? [String: Any])?["cmd"] as? Int else { return }
+        commands.append(command)
+        if command == 14 {
+            Task {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                onMessage?(["cmd": 14, "capabilities": [
+                    "shouldUseBase64": true,
+                    "operatingSystem": [
+                        "name": "macos",
+                        "majorVersion": 27,
+                        "minorVersion": 0
+                    ]
+                ]])
+            }
+        }
+    }
+
+    func close() {}
+}
+
+private final class TerminatedPageDelegate: BrowserPageDelegate {
+    var error: NSError?
+    func browserPage(_ page: BrowserPage, didFailNavigationWith error: Error, failingURL: URL?) {
+        self.error = error as NSError
     }
 }

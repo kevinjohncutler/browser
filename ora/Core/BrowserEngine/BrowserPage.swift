@@ -406,6 +406,18 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         originalURL = nil
     }
 
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        // A failed content process must leave a retryable status page, never an empty web view.
+        emitNavigationEvent(
+            phase: .finished, url: webView.url, title: webView.title, progress: 100, isLoading: false
+        )
+        let error = NSError(
+            domain: WKError.errorDomain, code: WKError.webContentProcessTerminated.rawValue,
+            userInfo: [NSLocalizedDescriptionKey: "The page stopped unexpectedly. Reload to try again."]
+        )
+        delegate?.browserPage(self, didFailNavigationWith: error, failingURL: webView.url ?? lastCommittedURL)
+    }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard !isDownloadNavigation else {
             originalURL = nil
