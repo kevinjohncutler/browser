@@ -9,10 +9,10 @@ class CustomKeyboardShortcutManager: ObservableObject {
     private let settingsStore = SettingsStore.shared
 
     private init() {
-        loadCustomShortcuts()
+        reloadCustomShortcuts()
     }
 
-    private func loadCustomShortcuts() {
+    func reloadCustomShortcuts() {
         customShortcuts = settingsStore.customKeyboardShortcuts
     }
 

@@ -1,6 +1,6 @@
-# Ora CSS integration
+# Ora model integration
 
-A local Model Context Protocol (MCP) server lets Claude create persistent Cascading Style Sheets (CSS) Boosts in Ora. No network listener or account token is required. It follows the [standard input/output transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#stdio).
+A local Model Context Protocol (MCP) server lets compatible language-model clients edit Ora's native appearance, browser preferences, and persistent Cascading Style Sheets (CSS) Boosts. No network listener or account token is required. It follows the [standard input/output transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#stdio).
 
 ## Connect Claude Code
 
@@ -14,7 +14,40 @@ Use an absolute Python interpreter path if the client cannot find `python`. The 
 
 For Claude desktop, add the same command and absolute script path as an `ora-css` entry under `mcpServers` in its configuration. Restart the client to load newly configured tools.
 
-## Use
+## Native customization
+
+Settings > Customize & MCP exposes the same validated catalog and persistent store as the server. It also provides copyable setup commands and client configuration. The signed app bundles the server under `Contents/Resources/OraMCP/server.py`; use the installed app's stable path when configuring a client. Python 3.10 or newer is required, with no third-party dependencies. Existing `ora-css` registrations remain compatible and now discover 13 tools.
+
+Ask your model: "Make Ora's sidebar darker, increase tab rows to 48 points, and use a rounded font." The model should:
+
+1. Read `list_settings_schema` and `get_settings`.
+2. Select keys from the catalog rather than inventing settings.
+3. Optionally call `preview_settings` to validate and inspect a batch without applying it.
+4. Call `update_settings` with `settings` and the current `expectedRevision`.
+5. Check `get_settings` for the app's applied revision and timestamp.
+
+For example:
+
+```json
+{
+  "settings": {
+    "theme.dark.sidebar": "#202020",
+    "theme.rowHeight": 48,
+    "theme.fontDesign": "rounded"
+  },
+  "expectedRevision": 2
+}
+```
+
+The catalog describes 58 global settings and per-space templates: appearance mode, light/dark theme colors, font size/design, spacing, corners, sidebar size/position/visibility, toolbar visibility, tab retention, media behavior, privacy, custom ad-block lists, password preferences, search providers, keyboard shortcuts, site permissions, and space metadata/defaults. Replace `{spaceId}` using the spaces returned by `get_settings`. Space identifiers are normalized consistently. Global privacy defaults seed new spaces; existing spaces retain their own privacy choices. Built-in filter catalogs stay managed by Ora; custom filter lists and per-space enabled selections are editable.
+
+Theme and layout edits apply live. Privacy changes apply on the next navigation. The catalog identifies application timing for each setting. Software updates remain disabled by the development build regardless of the stored preference. Apple Passwords settings select or enable its existing integration; these tools neither expose stored credentials nor bypass Apple's authentication.
+
+`reset_settings` restores only named settings. `undo_settings` reverses the last batch without replacing unrelated preferences. Native controls and MCP share an undo history of up to 50 batches, retained across restarts. `export_settings_profile` returns portable JSON, optionally limited to selected keys; `import_settings_profile` validates the complete profile and applies it as one undoable batch. The native editor imports and exports the same profile files. Exports contain preferences, not vault credentials or webpage contents.
+
+Preferences use `Customization/preferences.json` next to the existing `Boosts` directory. Both processes lock `preferences.lock`, validate every value, and atomically replace the document. Invalid batches, stale expected revisions, and corrupt files are rejected without destroying saved settings. Native controls are reconciled before editor transactions and during the half-second poll. While Ora is closed, edits persist for its next launch; app status and page context can be stale.
+
+## Website styles
 
 Ask Claude: "Make the current Ora webpage darker using a CSS Boost."
 

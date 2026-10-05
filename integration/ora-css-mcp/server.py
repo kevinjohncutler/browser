@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Local stdio Model Context Protocol server for persistent Ora CSS Boosts."""
+"""Local stdio Model Context Protocol server for Ora customization and CSS Boosts."""
 
 import argparse
 import contextlib
@@ -11,6 +11,9 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
+
+# Keep packaged resources immutable so running the server preserves app signing.
+sys.dont_write_bytecode = True
 
 PROTOCOLS = ("2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25")
 
@@ -45,7 +48,7 @@ class Store:
     @contextlib.contextmanager
     def locked(self):
         self.directory.mkdir(parents=True, exist_ok=True)
-        with (self.directory / "boosts.lock").open("a") as lock:
+        with self.path.with_suffix(".lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             yield
 
@@ -214,6 +217,18 @@ TOOLS = [
     ),
 ]
 
+PREFERENCE_TOOLS = [
+    tool("list_settings_schema", "Discover every native setting, its type, default, allowed values, scope, and apply timing. Space keys replace {spaceId} with an id from get_settings.", schema(), True),
+    tool("get_settings", "Read native browser preferences, revision, available spaces, and the app's last applied revision. Read before editing.", schema(), True),
+    tool("update_settings", "Apply a validated atomic batch of persistent native settings. Use expectedRevision from get_settings. Theme and layout apply live. Website CSS uses the existing CSS Boost tools.", schema({"settings":{"type":"object"}, "expectedRevision":{"type":"integer"}}, ["settings"])),
+    tool("preview_settings", "Validate a settings batch and return its changes without saving or changing Ora.", schema({"settings":{"type":"object"}, "expectedRevision":{"type":"integer"}}, ["settings"]), True),
+    tool("reset_settings", "Reset only the named settings to catalog defaults. Undo remains available.", schema({"keys":{"type":"array","items":{"type":"string"}}, "expectedRevision":{"type":"integer"}}, ["keys"])),
+    tool("undo_settings", "Undo the most recent native or MCP settings batch. Unrelated settings remain unchanged. History survives restarts.", schema({"expectedRevision":{"type":"integer"}})),
+    tool("export_settings_profile", "Export a portable JSON settings profile. Optional keys select a theme-only or other subset. No passwords or page contents are included.", schema({"name":{"type":"string"}, "keys":{"type":"array","items":{"type":"string"}}}), True),
+    tool("import_settings_profile", "Validate and apply an exported profile as one undoable settings batch. Existing settings not in the profile are preserved.", schema({"profile":{"type":"object"}, "expectedRevision":{"type":"integer"}}, ["profile"])),
+]
+TOOLS += PREFERENCE_TOOLS
+
 
 def handle(request, store):
     identifier = request.get("id")
@@ -226,7 +241,7 @@ def handle(request, store):
         result = {
             "protocolVersion": version if version in PROTOCOLS else "2025-06-18",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "ora-css", "version": "0.1.0"},
+            "serverInfo": {"name": "ora-css", "version": "0.2.0"},
         }
     elif method == "ping":
         result = {}
@@ -234,7 +249,12 @@ def handle(request, store):
         result = {"tools": TOOLS}
     elif method == "tools/call":
         try:
-            value = store.call(params.get("name"), params.get("arguments") or {})
+            name = params.get("name")
+            target = store
+            if name in {entry["name"] for entry in PREFERENCE_TOOLS}:
+                from preferences import Preferences
+                target = Preferences(store.directory.parent / "Customization")
+            value = target.call(name, params.get("arguments") or {})
             result = {
                 "content": [
                     {"type": "text", "text": json.dumps(value, ensure_ascii=False)}

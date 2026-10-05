@@ -81,6 +81,7 @@ struct SidebarView: View {
             // Swipe-to-dismiss gesture on the whole sidebar when downloads is showing
             .simultaneousGesture(downloadsNavigationGesture(width: width))
         }
+        .background(theme.solidWindowBackgroundColor.opacity(theme.tintOpacity))
         .enableInjection()
     }
 

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct BrowserContentContainer<Content: View>: View {
+    @Environment(\.theme) private var theme
     @EnvironmentObject var tabManager: TabManager
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var sidebarManager: SidebarManager
@@ -12,11 +13,7 @@ struct BrowserContentContainer<Content: View>: View {
     }
 
     private var cornerRadius: CGFloat {
-        if #available(macOS 26, *) {
-            return 13
-        } else {
-            return 6
-        }
+        theme.cornerRadius
     }
 
     init(

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 enum SettingsTab: String, Hashable, CaseIterable {
+    case customization
     case general
     case spaces
     case passwords
@@ -11,6 +12,7 @@ enum SettingsTab: String, Hashable, CaseIterable {
 
     var title: String {
         switch self {
+        case .customization: return "Customize & MCP"
         case .boosts: return "CSS Boosts"
         case .general: return "General"
         case .spaces: return "Spaces"
@@ -22,6 +24,7 @@ enum SettingsTab: String, Hashable, CaseIterable {
 
     var symbol: String {
         switch self {
+        case .customization: return "slider.horizontal.3"
         case .boosts: return "paintbrush"
         case .general: return "gearshape"
         case .spaces: return "rectangle.3.group"
@@ -33,6 +36,8 @@ enum SettingsTab: String, Hashable, CaseIterable {
 
     var subtitle: String {
         switch self {
+        case .customization:
+            return "Live appearance, browser preferences, profiles, and model integration."
         case .boosts:
             return "Persistent website styles and Claude integration."
         case .general:
@@ -51,7 +56,7 @@ enum SettingsTab: String, Hashable, CaseIterable {
 
 struct SettingsWindowRoot: View {
     var body: some View {
-        SettingsContentView()
+        SettingsContentView().withTheme()
             .environmentObject(ToastManager.shared)
     }
 }
@@ -91,6 +96,8 @@ struct SettingsContentView: View {
     @ViewBuilder
     private var detailView: some View {
         switch selectedTab {
+        case .customization:
+            CustomizationSettingsView()
         case .boosts:
             BoostsSettingsView()
         case .general:

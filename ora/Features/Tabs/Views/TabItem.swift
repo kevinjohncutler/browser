@@ -111,19 +111,20 @@ struct TabItem: View {
                 }
             }
         }
-        .padding(8)
+        .padding(theme.spacing)
+        .frame(minHeight: theme.rowHeight)
         .opacity(isDragging ? 0.0 : 1.0)
-        .background(backgroundColor, in: .rect(cornerRadius: 10))
+        .background(backgroundColor, in: .rect(cornerRadius: theme.cornerRadius))
         .overlay(
             isDragging ?
-                ConditionallyConcentricRectangle(cornerRadius: 10)
+                ConditionallyConcentricRectangle(cornerRadius: theme.cornerRadius)
                 .stroke(
                     theme.invertedSolidWindowBackgroundColor.opacity(0.25),
                     style: StrokeStyle(lineWidth: 1, dash: [5, 5])
                 )
                 : nil
         )
-        .contentShape(ConditionallyConcentricRectangle(cornerRadius: 10))
+        .contentShape(ConditionallyConcentricRectangle(cornerRadius: theme.cornerRadius))
         .onTapGesture {
             onTap()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
@@ -146,7 +147,7 @@ struct TabItem: View {
 
     private var tabTitle: some View {
         Text(tab.title)
-            .font(.system(size: 13))
+            .font(theme.textFont)
             .foregroundColor(textColor)
             .lineLimit(1)
     }
@@ -167,7 +168,7 @@ struct TabItem: View {
     }
 
     private var textColor: Color {
-        isSelected ? .white : theme.foreground
+        theme.foreground
     }
 
     @ViewBuilder

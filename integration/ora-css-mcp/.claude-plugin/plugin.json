@@ -1,5 +1,5 @@
 {
   "name": "ora-css",
-  "version": "0.1.0",
-  "description": "Persistent CSS Boosts for Ora, with site and wildcard scopes."
+  "version": "0.2.0",
+  "description": "Live Ora appearance and browser preferences, profiles, undo, and persistent CSS Boosts."
 }

@@ -1,0 +1,1222 @@
+{
+  "version": 1,
+  "settings": [
+    {
+      "id": "appearance.mode",
+      "title": "Appearance",
+      "description": "Appearance.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "System",
+        "enum": [
+          "System",
+          "Light",
+          "Dark"
+        ]
+      },
+      "defaultsKey": "ui.app.appearance"
+    },
+    {
+      "id": "sidebar.hidden",
+      "title": "Hide sidebar",
+      "description": "Hide sidebar.",
+      "category": "Layout",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "defaultsKey": "ui.sidebar.hidden"
+    },
+    {
+      "id": "toolbar.hidden",
+      "title": "Hide toolbar",
+      "description": "Hide toolbar.",
+      "category": "Layout",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "defaultsKey": "ui.toolbar.hidden"
+    },
+    {
+      "id": "toolbar.showFullURL",
+      "title": "Show full address",
+      "description": "Show full address.",
+      "category": "Layout",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultsKey": "ui.toolbar.showfullurl"
+    },
+    {
+      "id": "sidebar.position",
+      "title": "Sidebar position",
+      "description": "Sidebar position.",
+      "category": "Layout",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "primary",
+        "enum": [
+          "primary",
+          "secondary"
+        ]
+      },
+      "defaultsKey": "ui.sidebar.position"
+    },
+    {
+      "id": "sidebar.primaryFraction",
+      "title": "Primary sidebar width fraction",
+      "description": "Primary sidebar width fraction.",
+      "category": "Layout",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "number",
+        "default": 0.2,
+        "minimum": 0.16,
+        "maximum": 0.3
+      },
+      "defaultsKey": "ui.sidebar.fraction.primary"
+    },
+    {
+      "id": "sidebar.secondaryFraction",
+      "title": "Secondary sidebar width fraction",
+      "description": "Secondary sidebar width fraction.",
+      "category": "Layout",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "number",
+        "default": 0.2,
+        "minimum": 0.16,
+        "maximum": 0.3
+      },
+      "defaultsKey": "ui.sidebar.fraction.secondary"
+    },
+    {
+      "id": "tabs.suspendAfterSeconds",
+      "title": "Suspend inactive tabs after seconds",
+      "description": "Suspend inactive tabs after seconds.",
+      "category": "Browser",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "integer",
+        "default": 3600,
+        "enum": [
+          3600,
+          21600,
+          43200,
+          86400,
+          172800,
+          31536000
+        ]
+      },
+      "defaultsKey": "settings.tabAliveTimeout"
+    },
+    {
+      "id": "tabs.removeAfterSeconds",
+      "title": "Remove inactive tabs after seconds",
+      "description": "Remove inactive tabs after seconds.",
+      "category": "Browser",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "integer",
+        "default": 86400,
+        "enum": [
+          3600,
+          21600,
+          43200,
+          86400,
+          172800,
+          31536000
+        ]
+      },
+      "defaultsKey": "settings.tabRemovalTimeout"
+    },
+    {
+      "id": "tabs.maxRecent",
+      "title": "Maximum recent tabs",
+      "description": "Maximum recent tabs.",
+      "category": "Browser",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "integer",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 10
+      },
+      "defaultsKey": "settings.maxRecentTabs"
+    },
+    {
+      "id": "media.autoPictureInPicture",
+      "title": "Automatic picture-in-picture",
+      "description": "Automatic picture-in-picture.",
+      "category": "Browser",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultsKey": "settings.autoPiPEnabled"
+    },
+    {
+      "id": "updates.automatic",
+      "title": "Check for updates automatically",
+      "description": "Check for software updates after launch. The signed development build disables upstream updates regardless of this preference.",
+      "category": "Browser",
+      "scope": "global",
+      "apply": "nextLaunch",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "defaultsKey": "settings.autoUpdateEnabled"
+    },
+    {
+      "id": "privacy.blockTrackers",
+      "title": "Block third-party trackers",
+      "description": "Block third-party trackers. Supplies the privacy default when a space is first created.",
+      "category": "Privacy",
+      "scope": "global",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "defaultsKey": "settings.tracking.blockThirdParty"
+    },
+    {
+      "id": "privacy.blockFingerprinting",
+      "title": "Block fingerprinting",
+      "description": "Block fingerprinting. Supplies the privacy default when a space is first created.",
+      "category": "Privacy",
+      "scope": "global",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultsKey": "settings.tracking.blockFingerprinting"
+    },
+    {
+      "id": "privacy.adBlocking",
+      "title": "Block ads",
+      "description": "Block ads. Supplies the privacy default when a space is first created.",
+      "category": "Privacy",
+      "scope": "global",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "defaultsKey": "settings.tracking.adBlocking"
+    },
+    {
+      "id": "privacy.cookies",
+      "title": "Cookie policy",
+      "description": "Cookie policy. Supplies the privacy default when a space is first created.",
+      "category": "Privacy",
+      "scope": "global",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "string",
+        "default": "Allow all",
+        "enum": [
+          "Allow all",
+          "Block third-party",
+          "Block all"
+        ]
+      },
+      "defaultsKey": "settings.cookies.policy"
+    },
+    {
+      "id": "passwords.enabled",
+      "title": "Passwords enabled",
+      "description": "Passwords enabled.",
+      "category": "Passwords",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultsKey": "settings.passwords.enabled"
+    },
+    {
+      "id": "passwords.autofill",
+      "title": "Passwords autofill",
+      "description": "Passwords autofill.",
+      "category": "Passwords",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultsKey": "settings.passwords.autofillEnabled"
+    },
+    {
+      "id": "passwords.autoSubmit",
+      "title": "Passwords autoSubmit",
+      "description": "Automatically submit Ora's built-in vault autofill. Apple's extension controls its own submit behavior.",
+      "category": "Passwords",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultsKey": "settings.passwords.autofillSubmitEnabled"
+    },
+    {
+      "id": "passwords.savePrompts",
+      "title": "Passwords savePrompts",
+      "description": "Show save prompts for Ora's built-in vault. Apple's extension uses its own save interface.",
+      "category": "Passwords",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultsKey": "settings.passwords.savePromptsEnabled"
+    },
+    {
+      "id": "passwords.provider",
+      "title": "Password provider",
+      "description": "Password provider.",
+      "category": "Passwords",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "applePasswords",
+        "enum": [
+          "applePasswords",
+          "ora"
+        ]
+      },
+      "defaultsKey": "settings.passwords.provider"
+    },
+    {
+      "id": "search.defaultEngine",
+      "title": "Default search provider",
+      "description": "Default search provider.",
+      "category": "Search",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null,
+        "maxLength": 120
+      },
+      "defaultsKey": "settings.globalDefaultSearchEngine"
+    },
+    {
+      "id": "search.customEngines",
+      "title": "Custom search providers",
+      "description": "Custom search providers.",
+      "category": "Search",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "array",
+        "default": [],
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "searchURL": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 50
+              },
+              "maxItems": 30
+            },
+            "isAIChat": {
+              "type": "boolean"
+            },
+            "faviconData": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "contentEncoding": "base64",
+              "maxLength": 2000000
+            },
+            "faviconBackgroundColorData": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "contentEncoding": "base64",
+              "maxLength": 2000000
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "searchURL",
+            "aliases",
+            "isAIChat"
+          ],
+          "additionalProperties": false
+        },
+        "maxItems": 100,
+        "uniqueItemIDs": true
+      },
+      "defaultsKey": "settings.customSearchEngines",
+      "storage": "json"
+    },
+    {
+      "id": "shortcuts.overrides",
+      "title": "Keyboard shortcut overrides",
+      "description": "Keyboard shortcut overrides keyed by the command IDs listed in propertyNames. Modifiers use command=16, option=8, control=4, shift=2, combined by addition.",
+      "category": "Shortcuts",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "object",
+        "default": {},
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "characterString": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1
+            },
+            "modifiers": {
+              "type": "integer",
+              "enum": [
+                0,
+                2,
+                4,
+                6,
+                8,
+                10,
+                12,
+                14,
+                16,
+                18,
+                20,
+                22,
+                24,
+                26,
+                28,
+                30
+              ]
+            }
+          },
+          "required": [
+            "characterString",
+            "modifiers"
+          ],
+          "additionalProperties": false
+        },
+        "maxProperties": 200,
+        "propertyNames": {
+          "type": "string",
+          "enum": [
+            "tabs.new",
+            "tabs.close",
+            "tabs.restore",
+            "tabs.next",
+            "tabs.previous",
+            "tabs.moveRight",
+            "tabs.moveLeft",
+            "tabs.pin",
+            "tabs.tab1",
+            "tabs.tab2",
+            "tabs.tab3",
+            "tabs.tab4",
+            "tabs.tab5",
+            "tabs.tab6",
+            "tabs.tab7",
+            "tabs.tab8",
+            "tabs.tab9",
+            "navigation.back",
+            "navigation.forward",
+            "navigation.reload",
+            "navigation.hardReload",
+            "window.new",
+            "window.newPrivate",
+            "window.close",
+            "window.fullscreen",
+            "address.copyURL",
+            "address.focus",
+            "edit.find",
+            "edit.findNext",
+            "edit.findPrevious",
+            "history.show",
+            "zoom.zoomIn",
+            "zoom.zoomOut",
+            "zoom.reset",
+            "developer.toggleDevTools",
+            "developer.reloadIgnoringCache",
+            "app.quit",
+            "app.hide",
+            "app.preferences",
+            "app.toggleSidebar",
+            "app.toggleToolbar"
+          ]
+        }
+      },
+      "defaultsKey": "settings.customKeyboardShortcuts",
+      "storage": "json"
+    },
+    {
+      "id": "privacy.sitePermissions",
+      "title": "Site permissions",
+      "description": "Site permissions.",
+      "category": "Privacy",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "object",
+        "default": {},
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "host": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253
+            },
+            "camera": {
+              "type": "boolean"
+            },
+            "microphone": {
+              "type": "boolean"
+            },
+            "location": {
+              "type": "boolean"
+            },
+            "notifications": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "host",
+            "camera",
+            "microphone",
+            "location",
+            "notifications"
+          ],
+          "additionalProperties": false
+        },
+        "maxProperties": 500,
+        "mapKeyField": "host"
+      },
+      "defaultsKey": "settings.permissions.sitePermissions",
+      "storage": "json"
+    },
+    {
+      "id": "passwords.suppressedSaveHosts",
+      "title": "Sites without password save prompts",
+      "description": "Hosts excluded from Ora's built-in vault save prompts.",
+      "category": "Passwords",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "array",
+        "default": [],
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "maxItems": 500
+      },
+      "defaultsKey": "settings.passwords.suppressedSavePromptHosts"
+    },
+    {
+      "id": "privacy.filterLists",
+      "title": "Custom filter lists",
+      "description": "Custom ad-block filter records. Built-in lists remain managed by Ora; select enabled lists in each space.",
+      "category": "Privacy",
+      "scope": "global",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "array",
+        "default": [],
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "maxLength": 2000,
+              "minLength": 1
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 2000,
+              "minLength": 1
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "sourceURL": {
+              "type": "string",
+              "maxLength": 2000,
+              "pattern": "^https?://[^\\s/]+(?:/[^\\s]*)?$",
+              "minLength": 1
+            },
+            "sourceKind": {
+              "type": "string",
+              "enum": [
+                "custom"
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "idle",
+                "updating",
+                "ready",
+                "failed"
+              ]
+            },
+            "isRecommended": {
+              "type": "boolean"
+            },
+            "enabledByDefault": {
+              "type": "boolean"
+            },
+            "lastErrorMessage": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "etag": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "lastModified": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "activeRevision": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "lastFetchAt": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "lastSuccessfulRefreshAt": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "coverage": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "totalRuleCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "convertedRuleCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "skippedRuleCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "safariRuleCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "shardCount": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "totalRuleCount",
+                "convertedRuleCount",
+                "skippedRuleCount",
+                "safariRuleCount",
+                "shardCount"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "summary",
+            "sourceURL",
+            "sourceKind",
+            "status",
+            "isRecommended",
+            "enabledByDefault"
+          ],
+          "additionalProperties": false
+        },
+        "maxItems": 100,
+        "uniqueItemIDs": true,
+        "forbiddenItemIDs": [
+          "adguard-base",
+          "adguard-mobile-ads",
+          "adguard-tracking-protection",
+          "adguard-url-tracking",
+          "adguard-annoyances"
+        ]
+      },
+      "defaultsKey": "settings.adBlock.filterLists",
+      "storage": "json"
+    },
+    {
+      "id": "theme.light.background",
+      "title": "Light background color",
+      "description": "Native content background. Website backgrounds use CSS Boosts.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#fafafa",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.light.background"
+    },
+    {
+      "id": "theme.light.foreground",
+      "title": "Light foreground color",
+      "description": "Primary native text color.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#262626",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.light.foreground"
+    },
+    {
+      "id": "theme.light.sidebar",
+      "title": "Light sidebar color",
+      "description": "Native sidebar color, combined with the window tint opacity.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#e5e5e5",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.light.sidebar"
+    },
+    {
+      "id": "theme.light.toolbar",
+      "title": "Light toolbar color",
+      "description": "Sidebar navigation header and popover background color.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#e5e5e5",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.light.toolbar"
+    },
+    {
+      "id": "theme.light.accent",
+      "title": "Light accent color",
+      "description": "Native controls and accent color.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#525252",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.light.accent"
+    },
+    {
+      "id": "theme.light.selectedTab",
+      "title": "Light selectedTab color",
+      "description": "Selected sidebar tab background color.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#d4d4d4",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.light.selectedTab"
+    },
+    {
+      "id": "theme.dark.background",
+      "title": "Dark background color",
+      "description": "Native content background. Website backgrounds use CSS Boosts.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#171717",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.dark.background"
+    },
+    {
+      "id": "theme.dark.foreground",
+      "title": "Dark foreground color",
+      "description": "Primary native text color.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#e5e5e5",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.dark.foreground"
+    },
+    {
+      "id": "theme.dark.sidebar",
+      "title": "Dark sidebar color",
+      "description": "Native sidebar color, combined with the window tint opacity.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#262626",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.dark.sidebar"
+    },
+    {
+      "id": "theme.dark.toolbar",
+      "title": "Dark toolbar color",
+      "description": "Sidebar navigation header and popover background color.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#262626",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.dark.toolbar"
+    },
+    {
+      "id": "theme.dark.accent",
+      "title": "Dark accent color",
+      "description": "Native controls and accent color.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#d4d4d4",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.dark.accent"
+    },
+    {
+      "id": "theme.dark.selectedTab",
+      "title": "Dark selectedTab color",
+      "description": "Selected sidebar tab background color.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "#404040",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "defaultsKey": "customization.theme.dark.selectedTab"
+    },
+    {
+      "id": "theme.fontSize",
+      "title": "Text size",
+      "description": "Native body font size in points.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "number",
+        "default": 13,
+        "minimum": 10,
+        "maximum": 24
+      },
+      "defaultsKey": "customization.theme.fontSize"
+    },
+    {
+      "id": "theme.rowHeight",
+      "title": "Tab row height",
+      "description": "Minimum tab row height in points.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "number",
+        "default": 34,
+        "minimum": 26,
+        "maximum": 64
+      },
+      "defaultsKey": "customization.theme.rowHeight"
+    },
+    {
+      "id": "theme.spacing",
+      "title": "Row padding",
+      "description": "Native tab padding and spacing in points.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "number",
+        "default": 8,
+        "minimum": 2,
+        "maximum": 20
+      },
+      "defaultsKey": "customization.theme.spacing"
+    },
+    {
+      "id": "theme.cornerRadius",
+      "title": "Corner radius",
+      "description": "Native tabs, address controls, and content corners in points.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "number",
+        "default": 10,
+        "minimum": 0,
+        "maximum": 24
+      },
+      "defaultsKey": "customization.theme.cornerRadius"
+    },
+    {
+      "id": "theme.toolbarHeight",
+      "title": "Toolbar height",
+      "description": "Sidebar navigation header height in points.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "number",
+        "default": 38,
+        "minimum": 30,
+        "maximum": 70
+      },
+      "defaultsKey": "customization.theme.toolbarHeight"
+    },
+    {
+      "id": "theme.tintOpacity",
+      "title": "Window tint opacity",
+      "description": "Opacity of the native tint over the macOS window material.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "number",
+        "default": 0.3,
+        "minimum": 0,
+        "maximum": 1
+      },
+      "defaultsKey": "customization.theme.tintOpacity"
+    },
+    {
+      "id": "theme.fontDesign",
+      "title": "Text style",
+      "description": "Native body font design.",
+      "category": "Appearance",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "system",
+        "enum": [
+          "system",
+          "rounded",
+          "serif",
+          "monospaced"
+        ]
+      },
+      "defaultsKey": "customization.theme.fontDesign"
+    },
+    {
+      "id": "space.{spaceId}.search.defaultEngine",
+      "title": "Default search provider",
+      "description": "Default search provider.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "live",
+      "schema": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "defaultsKey": "settings.container.{spaceId}.defaultSearch"
+    },
+    {
+      "id": "space.{spaceId}.search.defaultAI",
+      "title": "Default AI provider",
+      "description": "Default AI provider.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "live",
+      "schema": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "defaultsKey": "settings.container.{spaceId}.defaultAI"
+    },
+    {
+      "id": "space.{spaceId}.tabs.autoClear",
+      "title": "Automatically clear tabs",
+      "description": "Automatically clear tabs.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "Never",
+        "enum": [
+          "Never",
+          "1 Hour",
+          "1 Day",
+          "1 Week"
+        ]
+      },
+      "defaultsKey": "settings.container.{spaceId}.autoClearTabsAfter"
+    },
+    {
+      "id": "space.{spaceId}.privacy.blockTrackers",
+      "title": "Block third-party trackers",
+      "description": "Block third-party trackers.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "defaultsKey": "settings.container.{spaceId}.privacy",
+      "storage": "json",
+      "path": [
+        "blockThirdPartyTrackers"
+      ]
+    },
+    {
+      "id": "space.{spaceId}.privacy.blockFingerprinting",
+      "title": "Block fingerprinting",
+      "description": "Block fingerprinting.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultsKey": "settings.container.{spaceId}.privacy",
+      "storage": "json",
+      "path": [
+        "blockFingerprinting"
+      ]
+    },
+    {
+      "id": "space.{spaceId}.privacy.cookies",
+      "title": "Cookie policy",
+      "description": "Cookie policy.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "string",
+        "default": "Allow all",
+        "enum": [
+          "Allow all",
+          "Block third-party",
+          "Block all"
+        ]
+      },
+      "defaultsKey": "settings.container.{spaceId}.privacy",
+      "storage": "json",
+      "path": [
+        "cookiesPolicy"
+      ]
+    },
+    {
+      "id": "space.{spaceId}.privacy.adBlocking",
+      "title": "Block ads",
+      "description": "Block ads.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "defaultsKey": "settings.container.{spaceId}.privacy",
+      "storage": "json",
+      "path": [
+        "adBlock",
+        "enabled"
+      ]
+    },
+    {
+      "id": "space.{spaceId}.privacy.filterUpdateMode",
+      "title": "Filter update policy",
+      "description": "Filter update policy.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "string",
+        "default": "onLaunchDaily",
+        "enum": [
+          "onLaunchDaily",
+          "manualOnly",
+          "aggressiveAuto"
+        ]
+      },
+      "defaultsKey": "settings.container.{spaceId}.privacy",
+      "storage": "json",
+      "path": [
+        "adBlock",
+        "updateMode"
+      ]
+    },
+    {
+      "id": "space.{spaceId}.privacy.builtinFilterIDs",
+      "title": "Enabled built-in filters",
+      "description": "Enabled built-in filters.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "array",
+        "default": [
+          "adguard-base",
+          "adguard-mobile-ads"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 100
+      },
+      "defaultsKey": "settings.container.{spaceId}.privacy",
+      "storage": "json",
+      "path": [
+        "adBlock",
+        "enabledBuiltinListIDs"
+      ]
+    },
+    {
+      "id": "space.{spaceId}.privacy.customFilterIDs",
+      "title": "Enabled custom filters",
+      "description": "Enabled custom filters.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "nextNavigation",
+      "schema": {
+        "type": "array",
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 100
+      },
+      "defaultsKey": "settings.container.{spaceId}.privacy",
+      "storage": "json",
+      "path": [
+        "adBlock",
+        "enabledCustomListIDs"
+      ]
+    },
+    {
+      "id": "space.{spaceId}.name",
+      "title": "Space name",
+      "description": "Space name.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "Default",
+        "minLength": 1,
+        "maxLength": 120
+      },
+      "source": "model"
+    },
+    {
+      "id": "space.{spaceId}.emoji",
+      "title": "Space icon",
+      "description": "Space icon.",
+      "category": "Spaces",
+      "scope": "space",
+      "apply": "live",
+      "schema": {
+        "type": "string",
+        "default": "\u2022",
+        "minLength": 1,
+        "maxLength": 120
+      },
+      "source": "model"
+    }
+  ]
+}

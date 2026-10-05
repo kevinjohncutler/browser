@@ -67,7 +67,7 @@ struct FolderRow: View {
                 .font(.system(size: 12))
                 .foregroundColor(theme.mutedForeground)
             Text(folder.name)
-                .font(.system(size: 13))
+                .font(theme.textFont)
                 .foregroundColor(theme.foreground)
                 .lineLimit(1)
             Spacer()
@@ -77,8 +77,11 @@ struct FolderRow: View {
                     .foregroundColor(theme.mutedForeground)
             }
         }
-        .padding(8)
-        .background(isHoveringHeader ? theme.activeTabBackground.opacity(0.1) : .clear, in: .rect(cornerRadius: 10))
+        .padding(theme.spacing)
+        .background(
+            isHoveringHeader ? theme.activeTabBackground.opacity(0.1) : .clear,
+            in: .rect(cornerRadius: theme.cornerRadius)
+        )
         .contentShape(Rectangle())
         .onHover { isHoveringHeader = $0 }
         .onTapGesture {

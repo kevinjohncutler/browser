@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct URLBarButton: View {
+    @Environment(\.theme) private var theme
     let systemName: String
     let isEnabled: Bool
     let foregroundColor: Color
@@ -9,11 +10,7 @@ struct URLBarButton: View {
     @State private var isHovering = false
 
     private var cornerRadius: CGFloat {
-        if #available(macOS 26, *) {
-            return 10
-        } else {
-            return 10
-        }
+        theme.cornerRadius
     }
 
     var body: some View {

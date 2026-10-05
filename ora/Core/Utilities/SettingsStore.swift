@@ -138,7 +138,7 @@ struct CustomSearchEngine: Codable, Identifiable, Hashable {
 
 class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
     // MARK: - Global keys
 
@@ -278,7 +278,8 @@ class SettingsStore: ObservableObject {
         ) }
     }
 
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         autoUpdateEnabled = defaults.bool(forKey: autoUpdateKey)
         blockThirdPartyTrackers = defaults.bool(forKey: trackingThirdPartyKey)
         blockFingerprinting = defaults.object(forKey: fingerprintingKey) as? Bool ?? true
@@ -292,19 +293,19 @@ class SettingsStore: ObservableObject {
         }
 
         sitePermissions =
-            Self.loadCodable([String: SitePermissionSettings].self, key: sitePermissionsKey) ?? [:]
+            Self.loadCodable([String: SitePermissionSettings].self, key: sitePermissionsKey, defaults: defaults) ?? [:]
 
         adBlockFilterLists = FilterListCatalogService.shared.normalizedRecords(
-            from: Self.loadCodable([FilterListRecord].self, key: adBlockFilterListsKey) ?? []
+            from: Self.loadCodable([FilterListRecord].self, key: adBlockFilterListsKey, defaults: defaults) ?? []
         )
 
         customSearchEngines =
-            Self.loadCodable([CustomSearchEngine].self, key: customSearchEnginesKey) ?? []
+            Self.loadCodable([CustomSearchEngine].self, key: customSearchEnginesKey, defaults: defaults) ?? []
 
         globalDefaultSearchEngine = defaults.string(forKey: globalDefaultSearchEngineKey)
 
         customKeyboardShortcuts =
-            Self.loadCodable([String: KeyChord].self, key: customKeyboardShortcutsKey) ?? [:]
+            Self.loadCodable([String: KeyChord].self, key: customKeyboardShortcutsKey, defaults: defaults) ?? [:]
 
         let aliveTimeoutValue = defaults.double(forKey: tabAliveTimeoutKey)
         let supportedTimeouts: [TimeInterval] = [
@@ -351,6 +352,78 @@ class SettingsStore: ObservableObject {
             .stringArray(forKey: suppressedPasswordSavePromptHostsKey) ?? [])
     }
 
+    /// Reload only changed native properties after a validated customization transaction.
+    func reloadPreferences(from incoming: UserDefaults) {
+        restoreValue(autoUpdateKey, at: \.autoUpdateEnabled, from: incoming)
+        restoreValue(trackingThirdPartyKey, at: \.blockThirdPartyTrackers, from: incoming)
+        restoreValue(fingerprintingKey, at: \.blockFingerprinting, from: incoming)
+        restoreValue(adBlockingKey, at: \.adBlocking, from: incoming)
+        restoreValue(tabAliveTimeoutKey, at: \.tabAliveTimeout, from: incoming)
+        restoreValue(tabRemovalTimeoutKey, at: \.tabRemovalTimeout, from: incoming)
+        restoreValue(maxRecentTabsKey, at: \.maxRecentTabs, from: incoming)
+        restoreValue(autoPiPEnabledKey, at: \.autoPiPEnabled, from: incoming)
+        restoreValue(passwordsEnabledKey, at: \.passwordsEnabled, from: incoming)
+        restoreValue(passwordAutofillEnabledKey, at: \.passwordAutofillEnabled, from: incoming)
+        restoreValue(passwordAutofillSubmitEnabledKey, at: \.passwordAutofillSubmitEnabled, from: incoming)
+        restoreValue(passwordSavePromptsEnabledKey, at: \.passwordSavePromptsEnabled, from: incoming)
+        restoreEnum(cookiesPolicyKey, at: \.cookiesPolicy, from: incoming)
+        restoreEnum(passwordManagerProviderKey, at: \.passwordManagerProvider, from: incoming)
+        let search = incoming.string(forKey: globalDefaultSearchEngineKey)
+        if search != globalDefaultSearchEngine {
+            globalDefaultSearchEngine = search
+        }
+        let hosts = Set(incoming.stringArray(forKey: suppressedPasswordSavePromptHostsKey) ?? [])
+        if hosts != suppressedPasswordSavePromptHosts {
+            suppressedPasswordSavePromptHosts = hosts
+        }
+        restoreCodable(customSearchEnginesKey, at: \.customSearchEngines, from: incoming)
+        restoreCodable(sitePermissionsKey, at: \.sitePermissions, from: incoming)
+        restoreCodable(customKeyboardShortcutsKey, at: \.customKeyboardShortcuts, from: incoming)
+        if let records = Self.loadCodable([FilterListRecord].self, key: adBlockFilterListsKey, defaults: incoming) {
+            let normalized = FilterListCatalogService.shared.normalizedRecords(from: records)
+            if normalized != adBlockFilterLists {
+                setAdBlockFilterLists(normalized)
+            }
+        }
+        objectWillChange.send()
+    }
+
+    private func restoreValue<Value: Equatable>(
+        _ key: String,
+        at path: ReferenceWritableKeyPath<SettingsStore, Value>,
+        from incoming: UserDefaults
+    ) {
+        if let value = incoming.object(forKey: key) as? Value,
+           value != self[keyPath: path]
+        {
+            self[keyPath: path] = value
+        }
+    }
+
+    private func restoreEnum<Value: RawRepresentable & Equatable>(
+        _ key: String,
+        at path: ReferenceWritableKeyPath<SettingsStore, Value>,
+        from incoming: UserDefaults
+    ) where Value.RawValue == String {
+        if let raw = incoming.string(forKey: key), let value = Value(rawValue: raw),
+           value != self[keyPath: path]
+        {
+            self[keyPath: path] = value
+        }
+    }
+
+    private func restoreCodable<Value: Codable & Equatable>(
+        _ key: String,
+        at path: ReferenceWritableKeyPath<SettingsStore, Value>,
+        from incoming: UserDefaults
+    ) {
+        if let value = Self.loadCodable(Value.self, key: key, defaults: incoming),
+           value != self[keyPath: path]
+        {
+            self[keyPath: path] = value
+        }
+    }
+
     // MARK: - Per-container helpers
 
     func defaultSearchEngineId(for containerId: UUID) -> String? {
@@ -386,7 +459,7 @@ class SettingsStore: ObservableObject {
     }
 
     func privacySettings(for containerId: UUID) -> SpacePrivacySettings {
-        Self.loadCodable(SpacePrivacySettings.self, key: keyForPrivacySettings(for: containerId))
+        Self.loadCodable(SpacePrivacySettings.self, key: keyForPrivacySettings(for: containerId), defaults: defaults)
             ?? legacyPrivacySettings
     }
 
@@ -508,8 +581,11 @@ class SettingsStore: ObservableObject {
         }
     }
 
-    private static func loadCodable<T: Decodable>(_ type: T.Type, key: String) -> T? {
-        let defaults = UserDefaults.standard
+    private static func loadCodable<T: Decodable>(
+        _ type: T.Type,
+        key: String,
+        defaults: UserDefaults = .standard
+    ) -> T? {
         guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(T.self, from: data)
     }

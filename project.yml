@@ -40,6 +40,21 @@ targets:
         product: ContentBlockerConverter
 
     preBuildScripts:
+      - name: "Bundle local MCP integration"
+        inputFiles:
+          - "$(SRCROOT)/integration/ora-css-mcp/server.py"
+          - "$(SRCROOT)/integration/ora-css-mcp/preferences.py"
+          - "$(SRCROOT)/integration/ora-css-mcp/arc_cache.py"
+          - "$(SRCROOT)/ora/Resources/settings-schema.json"
+        outputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/OraMCP/server.py"
+          - "$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/OraMCP/preferences.py"
+          - "$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/OraMCP/arc_cache.py"
+          - "$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/OraMCP/settings-schema.json"
+        script: |
+          MCP_DST="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app/Contents/Resources/OraMCP"
+          mkdir -p "$MCP_DST"
+          cp "$SRCROOT/integration/ora-css-mcp/server.py" "$SRCROOT/integration/ora-css-mcp/preferences.py" "$SRCROOT/integration/ora-css-mcp/arc_cache.py" "$SRCROOT/ora/Resources/settings-schema.json" "$MCP_DST/"
       - name: "Copy Icon Bundle"
         inputFiles:
           - "$(SRCROOT)/ora/Assets/Icons/OraIcon.icon"

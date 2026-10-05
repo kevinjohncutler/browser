@@ -74,16 +74,16 @@ struct FavTabItem: View {
         .frame(maxWidth: .infinity)
         .opacity(isDragging ? 0.0 : 1.0)
         .background(backgroundColor)
-        .cornerRadius(10)
+        .cornerRadius(theme.cornerRadius)
         .overlay(
             isDragging
-                ? RoundedRectangle(cornerRadius: 10, style: .continuous)
+                ? RoundedRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
                 .stroke(
                     theme.invertedSolidWindowBackgroundColor.opacity(0.25),
                     style: StrokeStyle(lineWidth: 1, dash: [5, 5])
                 )
                 : isSelected
-                ? RoundedRectangle(cornerRadius: 10, style: .continuous)
+                ? RoundedRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
                 .stroke(
                     theme.invertedSolidWindowBackgroundColor,
                     lineWidth: 1

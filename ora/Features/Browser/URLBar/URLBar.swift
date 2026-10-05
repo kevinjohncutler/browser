@@ -323,11 +323,11 @@ struct URLBar: View {
                 )
                 HStack(spacing: 0) {
                     Text(parts.host)
-                        .font(.system(size: 14))
+                        .font(theme.textFont)
                         .foregroundColor(buttonForegroundColor)
                     if !isInSidebar, let title = parts.title {
                         Text(" / \(title)")
-                            .font(.system(size: 14))
+                            .font(theme.textFont)
                             .foregroundColor(buttonForegroundColor.opacity(0.6))
                     }
                     Spacer()
@@ -339,7 +339,7 @@ struct URLBar: View {
                 .animation(.easeOut(duration: 0.3), value: showCopiedAnimation)
                 .animation(.easeOut(duration: 0.3), value: startWheelAnimation)
             }
-            .font(.system(size: 14))
+            .font(theme.textFont)
             .foregroundColor(buttonForegroundColor)
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -360,7 +360,7 @@ struct URLBar: View {
         .frame(height: 30)
         .padding(.horizontal, 8)
         .background(
-            ConditionallyConcentricRectangle(cornerRadius: 10, style: .continuous)
+            ConditionallyConcentricRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
                 .fill(buttonForegroundColor.opacity(0.08))
         )
         .contentShape(Rectangle())
@@ -416,10 +416,10 @@ struct URLBar: View {
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ConditionallyConcentricRectangle(cornerRadius: 10, style: .continuous)
+            ConditionallyConcentricRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
                 .fill(buttonForegroundColor.opacity(0.08))
                 .overlay(
-                    ConditionallyConcentricRectangle(cornerRadius: 10, style: .continuous)
+                    ConditionallyConcentricRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
                         .stroke(
                             buttonForegroundColor.opacity(0.1),
                             lineWidth: 1.2

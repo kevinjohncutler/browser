@@ -46,7 +46,7 @@ def test_stdio_roundtrip_and_persistence(tmp_path):
     responses = [json.loads(line) for line in process.stdout.splitlines()]
     assert [response["id"] for response in responses] == [1, 2, 3]
     assert responses[0]["result"]["capabilities"] == {"tools": {}}
-    assert len(responses[1]["result"]["tools"]) == 5
+    assert len(responses[1]["result"]["tools"]) == 13
     assert not responses[2]["result"]["isError"]
     reopened = server.Store(tmp_path)
     assert reopened.read()["rules"][0]["pattern"] == "*.example.com"

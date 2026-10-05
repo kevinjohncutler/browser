@@ -88,6 +88,7 @@ struct SidebarHeader: View {
             }
         }
         .padding(.horizontal, 18)
-        .frame(height: 38)
+        .frame(height: theme.toolbarHeight)
+        .background(theme.toolbarBackground.opacity(theme.tintOpacity))
     }
 }

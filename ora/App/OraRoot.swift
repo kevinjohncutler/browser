@@ -108,6 +108,21 @@ struct OraRoot: View {
             .withTheme()
             .enableInjection()
             .onAppear {
+                if !privacyMode.isPrivate {
+                    CustomizationStore.shared.registerSpaces(read: { [weak manager = tabManager] in
+                        guard let manager else { return [] }
+                        return ((try? manager.modelContext.fetch(FetchDescriptor<TabContainer>())) ?? [])
+                            .map { PreferenceSpace(id: $0.id.uuidString, name: $0.name, emoji: $0.emoji) }
+                    }, write: { [weak manager = tabManager] id, name, emoji in
+                        guard let manager, let uuid = UUID(uuidString: id),
+                              let container = try (manager.modelContext.fetch(FetchDescriptor<TabContainer>()))
+                              .first(where: { $0.id == uuid }) else { return }
+                        container.name = name
+                        container.emoji = emoji
+                        try manager.modelContext.save()
+                        manager.objectWillChange.send()
+                    })
+                }
                 downloadManager.toastManager = toastManager
                 Task {
                     let containerIDs = await MainActor.run {

@@ -45,7 +45,8 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
     }
 
     func startIfInstalled() {
-        guard SettingsStore.shared.passwordManagerProvider == .applePasswords, context == nil, !loading,
+        guard SettingsStore.shared.passwordsEnabled, SettingsStore.shared.passwordAutofillEnabled,
+              SettingsStore.shared.passwordManagerProvider == .applePasswords, context == nil, !loading,
               FileManager.default
               .fileExists(atPath: Self.installationDirectory.appendingPathComponent("manifest.json").path)
         else { return }

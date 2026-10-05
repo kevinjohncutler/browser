@@ -7,6 +7,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Disable automatic window tabbing for all NSWindow instances
         NSWindow.allowsAutomaticWindowTabbing = false
+        _ = SettingsStore.shared
+        _ = CustomizationStore.shared
         AppearanceManager.shared.updateAppearance()
         #if DEBUG
             Bundle(path: "/Applications/InjectionIII.app/Contents/Resources/macOSInjection.bundle")?.load()
