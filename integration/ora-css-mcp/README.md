@@ -14,6 +14,31 @@ Use an absolute Python interpreter path if the client cannot find `python`. The 
 
 For Claude desktop, add the same command and absolute script path as an `ora-css` entry under `mcpServers` in its configuration. Restart the client to load newly configured tools.
 
+## Connect Codex
+
+Codex supports the same local server. Register the installed app's bundled server with an absolute Python interpreter path:
+
+```sh
+codex mcp add ora -- "$PYTHON_EXECUTABLE" "$ORA_APP_PATH/Contents/Resources/OraMCP/server.py"
+codex mcp get ora
+```
+
+Set `PYTHON_EXECUTABLE` to your Python 3.10 or newer interpreter and `ORA_APP_PATH` to the installed Ora development app. Registration persists in Codex's user configuration. New Codex sessions discover the server; restart an existing editor extension to reload its tools. See [OpenAI's Codex MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+
+The opt-in live test launches the actual Codex command-line client using its existing login. It asks the model to discover settings, change sidebar color and tab height, wait for the native runtime's acknowledgment, undo, and verify restoration. It uses a disposable store and an offscreen native test host, leaving the installed app's settings and windows untouched. It can consume model usage. An installed, signed-in Codex client is required:
+
+```sh
+TEST_RUNNER_ORA_CODEX_PATH="$CODEX_EXECUTABLE" \
+TEST_RUNNER_ORA_CODEX_SERVER_PATH="$ORA_APP_PATH/Contents/Resources/OraMCP/server.py" \
+TEST_RUNNER_ORA_CODEX_OUTPUT_DIRECTORY="$OUTPUT_DIRECTORY" \
+ORA_DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+scripts/test-headless.sh -only-testing:oraTests/CodexLiveTests
+```
+
+The output directory contains private Codex event logs, native preference evidence, and before/change/undo images. Other MCP servers are disabled for this test. This test does not access passwords or launch a visible browser. A local Codex registration does not add tools to a hosted ChatGPT web conversation.
+
+If the account rejects its configured model, set `TEST_RUNNER_ORA_CODEX_MODEL` to a model available to that account for this invocation. This override leaves the user's default model unchanged. Without `TEST_RUNNER_ORA_CODEX_PATH`, the account-backed test is skipped during ordinary test runs.
+
 ## Native customization
 
 Settings > Customize & MCP exposes the same validated catalog and persistent store as the server. It also provides copyable setup commands and client configuration. The signed app bundles the server under `Contents/Resources/OraMCP/server.py`; use the installed app's stable path when configuring a client. Python 3.10 or newer is required, with no third-party dependencies. Existing `ora-css` registrations remain compatible and now discover 13 tools.
