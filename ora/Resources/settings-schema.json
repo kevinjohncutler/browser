@@ -176,6 +176,19 @@
       "defaultsKey": "settings.autoPiPEnabled"
     },
     {
+      "id": "browser.confirmBeforeQuit",
+      "title": "Confirm before quitting",
+      "description": "Ask for confirmation before quitting Ora. Disabled by default so Command-Q quits immediately.",
+      "category": "Browser",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "defaultsKey": "settings.confirmBeforeQuit"
+    },
+    {
       "id": "updates.automatic",
       "title": "Check for updates automatically",
       "description": "Check for software updates after launch. The signed development build disables upstream updates regardless of this preference.",

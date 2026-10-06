@@ -143,6 +143,7 @@ class SettingsStore: ObservableObject {
     // MARK: - Global keys
 
     private let autoUpdateKey = "settings.autoUpdateEnabled"
+    private let confirmBeforeQuitKey = "settings.confirmBeforeQuit"
     private let trackingThirdPartyKey = "settings.tracking.blockThirdParty"
     private let fingerprintingKey = "settings.tracking.blockFingerprinting"
     private let adBlockingKey = "settings.tracking.adBlocking"
@@ -183,6 +184,10 @@ class SettingsStore: ObservableObject {
 
     @Published var autoUpdateEnabled: Bool {
         didSet { defaults.set(autoUpdateEnabled, forKey: autoUpdateKey) }
+    }
+
+    @Published var confirmBeforeQuit: Bool {
+        didSet { defaults.set(confirmBeforeQuit, forKey: confirmBeforeQuitKey) }
     }
 
     @Published var blockThirdPartyTrackers: Bool {
@@ -281,6 +286,7 @@ class SettingsStore: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         autoUpdateEnabled = defaults.bool(forKey: autoUpdateKey)
+        confirmBeforeQuit = defaults.bool(forKey: confirmBeforeQuitKey)
         blockThirdPartyTrackers = defaults.bool(forKey: trackingThirdPartyKey)
         blockFingerprinting = defaults.object(forKey: fingerprintingKey) as? Bool ?? true
         adBlocking = defaults.bool(forKey: adBlockingKey)
@@ -355,6 +361,7 @@ class SettingsStore: ObservableObject {
     /// Reload only changed native properties after a validated customization transaction.
     func reloadPreferences(from incoming: UserDefaults) {
         restoreValue(autoUpdateKey, at: \.autoUpdateEnabled, from: incoming)
+        restoreValue(confirmBeforeQuitKey, at: \.confirmBeforeQuit, from: incoming)
         restoreValue(trackingThirdPartyKey, at: \.blockThirdPartyTrackers, from: incoming)
         restoreValue(fingerprintingKey, at: \.blockFingerprinting, from: incoming)
         restoreValue(adBlockingKey, at: \.adBlocking, from: incoming)

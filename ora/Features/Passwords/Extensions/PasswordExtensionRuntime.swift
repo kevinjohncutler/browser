@@ -142,7 +142,11 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
     }
 
     func showAction() {
-        guard popup?.isShown != true, let context else { return }
+        if let popup, popup.isShown {
+            popup.contentViewController?.view.window?.makeKey()
+            return
+        }
+        guard let context else { return }
         context.performAction(for: windows.first?.items.first)
     }
 
@@ -248,14 +252,18 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
         for context: WKWebExtensionContext,
         completionHandler: @escaping (Error?) -> Void
     ) {
+        // Keep WebKit's own lifecycle, but do not dismiss pairing on browser or system-dialog clicks.
+        let popover = action.popupPopover
+        popover?.behavior = .applicationDefined
+        popover?.animates = false
         if let popupPresenter {
             popupPresenter(action)
             completionHandler(nil)
             return
         }
         guard ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] != "1",
-              let popover = action.popupPopover,
-              let tab = action.associatedTab as? PasswordExtensionTab,
+              let popover,
+              let tab = (action.associatedTab as? PasswordExtensionTab) ?? windows.first?.items.first,
               let anchor = tab.view, anchor.window != nil
         else {
             completionHandler(NSError(
@@ -266,9 +274,12 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
             return
         }
         popup?.close()
-        popover.behavior = .transient
         popover.show(
-            relativeTo: NSRect(x: 12, y: anchor.bounds.height - 1, width: 1, height: 1),
+            relativeTo: NSRect(
+                x: anchor.bounds.minX + 12,
+                y: anchor.isFlipped ? anchor.bounds.minY : anchor.bounds.maxY - 1,
+                width: 1, height: 1
+            ),
             of: anchor,
             preferredEdge: .minY
         )

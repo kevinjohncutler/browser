@@ -17,7 +17,7 @@ struct CustomizationTests {
     @Test func validatesEveryDefaultAndPreservesInvalidBatches() throws {
         let store = try makeStore()
         defer { try? FileManager.default.removeItem(at: store.directory.deletingLastPathComponent()) }
-        #expect(store.catalog.settings.count == 58)
+        #expect(store.catalog.settings.count == 59)
         for entry in store.catalog.settings {
             try store.catalog
                 .validate([entry.id.replacingOccurrences(of: "{spaceId}", with: UUID().uuidString): entry.defaultValue])
@@ -40,6 +40,7 @@ struct CustomizationTests {
         defer { try? FileManager.default.removeItem(at: store.directory.deletingLastPathComponent()) }
         try store.update(["theme.rowHeight": .number(48), "tabs.maxRecent": .number(8)])
         let settings = SettingsStore(defaults: store.defaults)
+        #expect(!settings.confirmBeforeQuit)
         #expect(settings.maxRecentTabs == 8)
         settings.maxRecentTabs = 3
         // An immediate editor change must preserve the native edit before the poll fires.
@@ -61,6 +62,20 @@ struct CustomizationTests {
         reopened.synchronize()
         reopened.synchronize()
         #expect(reopened.revision == revision)
+    }
+
+    @Test func quitConfirmationDefaultsOffAndCanChangeLive() throws {
+        let store = try makeStore()
+        defer { try? FileManager.default.removeItem(at: store.directory.deletingLastPathComponent()) }
+        let settings = SettingsStore(defaults: store.defaults)
+        #expect(!settings.confirmBeforeQuit)
+        #expect(store.values["browser.confirmBeforeQuit"] == .bool(false))
+        try store.update(["browser.confirmBeforeQuit": .bool(true)])
+        settings.reloadPreferences(from: store.defaults)
+        #expect(settings.confirmBeforeQuit)
+        try store.undo()
+        settings.reloadPreferences(from: store.defaults)
+        #expect(!settings.confirmBeforeQuit)
     }
 
     @Test func preservesMalformedStoresAndInvalidNativePreferences() throws {

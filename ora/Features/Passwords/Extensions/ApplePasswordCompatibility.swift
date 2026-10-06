@@ -80,9 +80,54 @@ enum ApplePasswordCompatibility {
     })();
     """
 
+    /// Refocusing a pairing popup must not replay the vendor state handler and erase entered digits.
+    static let popupFocus = """
+    (() => {
+      const pairingVisible = () => document.getElementById('divPIN')?.getBoundingClientRect().height > 0;
+      const vendorUpdate = window.updatePopupContents;
+      window.updatePopupContents = async function(state) {
+        // Repeated state broadcasts also occur when the active browser tab changes.
+        // Keep entered digits during the same challenge, and forward every non-pairing transition.
+        if ((state === ContextState.ChallengeSent || state === ContextState.MSG1Set) && pairingVisible()) return;
+        return vendorUpdate(state);
+      };
+      const vendorFocus = window.onfocus;
+      window.onfocus = function(event) {
+        if (pairingVisible()) return;
+        return vendorFocus?.call(this, event);
+      };
+    })();
+    """
+
+    private static func preparePopup(directory: URL) throws {
+        let html = directory.appendingPathComponent("page_popup.html")
+        guard FileManager.default.fileExists(atPath: html.path) else { return }
+        try popupFocus.write(to: directory.appendingPathComponent("ora_popup.js"), atomically: true, encoding: .utf8)
+        try "body.popup { min-height: 210px; }".write(
+            to: directory.appendingPathComponent("ora_popup.css"), atomically: true, encoding: .utf8
+        )
+        let original = try String(contentsOf: html, encoding: .utf8)
+        guard !original.contains("ora_popup.js") else { return }
+        // The vendor loads page_popup.js after </body>; our adapter must run after that script.
+        guard original.contains("</html>") else { throw CocoaError(.fileReadCorruptFile) }
+        let adapted = original.replacingOccurrences(of: "</html>", with: """
+        <link rel="stylesheet" href="ora_popup.css">
+        <script src="ora_popup.js"></script>
+        </html>
+        """)
+        try adapted.write(to: html, atomically: true, encoding: .utf8)
+    }
+
     static func prepare(directory: URL) throws {
         let versionFile = directory.appendingPathComponent("ora_compatibility_version")
-        if (try? String(contentsOf: versionFile, encoding: .utf8)) == "2" {
+        let version = try? String(contentsOf: versionFile, encoding: .utf8)
+        if version == "3" {
+            return
+        }
+        if version == "2" {
+            // Do not re-adapt already patched vendor scripts or replace extension session storage.
+            try preparePopup(directory: directory)
+            try "3".write(to: versionFile, atomically: true, encoding: .utf8)
             return
         }
         let manifestURL = directory.appendingPathComponent("manifest.json")
@@ -137,6 +182,7 @@ enum ApplePasswordCompatibility {
             to: manifestURL,
             options: .atomic
         )
-        try "2".write(to: versionFile, atomically: true, encoding: .utf8)
+        try preparePopup(directory: directory)
+        try "3".write(to: versionFile, atomically: true, encoding: .utf8)
     }
 }

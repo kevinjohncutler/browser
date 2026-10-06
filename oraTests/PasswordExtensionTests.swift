@@ -233,6 +233,37 @@ struct PasswordExtensionTests {
         try await verifyApplePopup(startAutomatically: true)
     }
 
+    @Test func upgradesPairingPopupWithoutRewritingVendorOrSessionFiles() throws {
+        guard let source = ProcessInfo.processInfo.environment["ORA_APPLE_EXTENSION_PATH"] else { return }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try ApplePasswordExtensionInstaller.install(from: URL(fileURLWithPath: source), to: directory)
+        try "2".write(
+            to: directory.appendingPathComponent("ora_compatibility_version"),
+            atomically: true,
+            encoding: .utf8
+        )
+        // Simulate an existing version 2 installation with unrelated saved state.
+        let html = directory.appendingPathComponent("page_popup.html")
+        try FileManager.default.removeItem(at: html)
+        try FileManager.default.copyItem(
+            at: URL(fileURLWithPath: source).appendingPathComponent("page_popup.html"),
+            to: html
+        )
+        let worker = try Data(contentsOf: directory.appendingPathComponent("ora_background.js"))
+        let completion = try Data(contentsOf: directory.appendingPathComponent("completion_list.js"))
+        let sentinel = directory.appendingPathComponent("synthetic-state.txt")
+        try Data("fixture-only".utf8).write(to: sentinel)
+        try ApplePasswordCompatibility.prepare(directory: directory)
+        let adapted = try Data(contentsOf: html)
+        try ApplePasswordCompatibility.prepare(directory: directory)
+        #expect(try Data(contentsOf: html) == adapted)
+        #expect(try Data(contentsOf: directory.appendingPathComponent("ora_background.js")) == worker)
+        #expect(try Data(contentsOf: directory.appendingPathComponent("completion_list.js")) == completion)
+        #expect(try Data(contentsOf: sentinel) == Data("fixture-only".utf8))
+        #expect(try String(contentsOf: html, encoding: .utf8).components(separatedBy: "ora_popup.js").count == 2)
+    }
+
     @Test func contentProcessFailureReportsRetryableNavigationError() throws {
         let delegate = TerminatedPageDelegate()
         let page = BrowserPage(
@@ -308,6 +339,7 @@ struct PasswordExtensionTests {
             try await Task.sleep(nanoseconds: 25_000_000)
         }
         let view = try #require(popupView)
+        #expect(action?.popupPopover?.behavior == .applicationDefined)
         #expect(helper.commands.contains(2))
         for _ in 0 ..< 120 {
             if await (try? view
@@ -325,6 +357,7 @@ struct PasswordExtensionTests {
             true)
         #expect(try await view
             .evaluateJavaScript("document.querySelector('#divPINMessage').textContent.length > 0") as? Bool == true)
+        try await verifyPopupFocus(view: view, page: page, helper: helper)
         // Offscreen WebKit pauses animation timelines. Finish the vendor's opacity fade before readback.
         _ = try await view.evaluateJavaScript("document.getAnimations().forEach(animation => animation.finish())")
         if let path = ProcessInfo.processInfo.environment["ORA_PREVIEW_DIRECTORY"] {
@@ -335,7 +368,6 @@ struct PasswordExtensionTests {
                 startAutomatically ? "apple-passwords-startup.png" : "apple-passwords-field-popup.png"
             ))
         }
-        action?.closePopup()
         for _ in 0 ..< 3 {
             page.reload()
             try await poll(page, "!!document.querySelector('[type=password]')")
@@ -344,7 +376,29 @@ struct PasswordExtensionTests {
         }
         #expect(presentations == 1)
         #expect(helper.starts == 1)
+        #expect(try await view.evaluateJavaScript("document.querySelector('#PIN0').value") as? String == "1")
         #expect(HeadlessTestHost.hasNoAppWindows)
+    }
+
+    @available(macOS 15.4, *)
+    private func verifyPopupFocus(
+        view: WKWebView,
+        page: BrowserPage,
+        helper: ApplePopupFixtureConnection
+    ) async throws {
+        let requestsBeforeFocus = helper.commands.filter { $0 == 2 }.count
+        // Only synthetic digits in a disposable vendor popup; never use a real Apple challenge in tests.
+        _ = try await view.evaluateJavaScript("document.querySelector('#PIN0').value='1';")
+        _ = try await evaluate(page, "document.querySelector('[type=password]').focus()")
+        _ = try await view.evaluateJavaScript("window.dispatchEvent(new FocusEvent('focus'))")
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(try await view.evaluateJavaScript("document.querySelector('#PIN0').value") as? String == "1")
+        #expect(helper.commands.filter { $0 == 2 }.count == requestsBeforeFocus)
+        #expect(try await view.evaluateJavaScript("""
+        Array.from(document.querySelectorAll('input.PIN')).every(input => {
+            const r=input.getBoundingClientRect(); return r.width>0 && r.height>0 && r.bottom<=innerHeight;
+        })
+        """) as? Bool == true)
     }
 
     private func evaluate(_ page: BrowserPage, _ script: String) async throws -> Any? {
