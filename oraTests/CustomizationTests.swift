@@ -17,7 +17,7 @@ struct CustomizationTests {
     @Test func validatesEveryDefaultAndPreservesInvalidBatches() throws {
         let store = try makeStore()
         defer { try? FileManager.default.removeItem(at: store.directory.deletingLastPathComponent()) }
-        #expect(store.catalog.settings.count == 59)
+        #expect(store.catalog.settings.count == 60)
         for entry in store.catalog.settings {
             try store.catalog
                 .validate([entry.id.replacingOccurrences(of: "{spaceId}", with: UUID().uuidString): entry.defaultValue])

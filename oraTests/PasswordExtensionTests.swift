@@ -233,6 +233,143 @@ struct PasswordExtensionTests {
         try await verifyApplePopup(startAutomatically: true)
     }
 
+    @Test func actualApplePopupFollowsAppearanceAndSubmitsAutomaticCodeOnce() async throws {
+        try await verifyApplePopup(startAutomatically: true, automaticCode: true)
+    }
+}
+
+extension PasswordExtensionTests {
+    @Test func actualVendorCipherRestoresInANewWebKitExtensionRuntime() async throws {
+        guard #available(macOS 15.4, *),
+              let source = ProcessInfo.processInfo.environment["ORA_APPLE_EXTENSION_PATH"],
+              let fixture = ProcessInfo.processInfo.environment["ORA_WEB_FIXTURE_URL"] else { return }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try ApplePasswordExtensionInstaller.install(from: URL(fileURLWithPath: source), to: directory)
+        try installChannelProbe(in: directory)
+        let channel = RestorableChannelFixture()
+        var ciphertext = ""
+        var popups = 0
+        for stage in 0 ..< 2 {
+            let runtime = PasswordExtensionRuntime(
+                persistent: false,
+                automaticallyUnlock: stage == 1,
+                popupPresenter: { _ in popups += 1 },
+                makeNativeConnection: { RestorableChannelConnection(channel) }
+            )
+            try await runtime.load(from: directory)
+            let page = BrowserPage(
+                profile: BrowserEngineProfile(identifier: UUID(), isPrivate: false),
+                configuration: .oraDefault(userScripts: [], privacySettings: SpacePrivacySettings()),
+                delegate: nil,
+                passwordExtensions: runtime
+            )
+            page.activatePasswordExtensions()
+            try page.load(URLRequest(url: #require(URL(string: fixture + "/login"))))
+            try await poll(page, "document.documentElement.dataset.oraProbeReady === 'true'")
+            for _ in 0 ..< 120 {
+                if runtime.status.contains("Connected") || runtime.status.contains("restored") {
+                    break
+                }
+                try await Task.sleep(nanoseconds: 25_000_000)
+            }
+            _ = try await (page.contentView as? WKWebView)?.callAsyncJavaScript(
+                """
+                document.documentElement.dataset.oraProbeMode = mode;
+                document.documentElement.dataset.oraFixtureCipher = cipher;
+                document.dispatchEvent(new Event('oraChannelProbe'));
+                """,
+                arguments: ["mode": stage == 0 ? "capture" : "verify", "cipher": ciphertext],
+                in: nil,
+                contentWorld: .page
+            )
+            try await poll(
+                page,
+                "document.documentElement.dataset.oraProbeResult != null || document.documentElement.dataset.oraProbeError != null"
+            )
+            let probeResult = try await evaluate(
+                page,
+                "document.documentElement.dataset.oraProbeResult || document.documentElement.dataset.oraProbeError"
+            ) as? String
+            let probeState = try await evaluate(
+                page,
+                "document.documentElement.dataset.oraProbeState + ':' + document.documentElement.dataset.oraProbeCode"
+            ) as? String
+            #expect(probeResult == "true", "Synthetic vendor channel stage \(stage), state \(probeState ?? "unknown")")
+            if stage == 0 {
+                ciphertext = try #require(try await evaluate(
+                    page,
+                    "document.documentElement.dataset.oraFixtureCipher"
+                ) as? String)
+                for _ in 0 ..< 120 {
+                    if channel.saved != nil {
+                        break
+                    }
+                    try await Task.sleep(nanoseconds: 25_000_000)
+                }
+                #expect(channel.saved != nil)
+                #expect(try RetainedPasswordSession.valid(#require(channel.saved)))
+            } else {
+                #expect(runtime.status.contains("restored"))
+            }
+            page.teardown()
+            runtime.shutdown()
+        }
+        #expect(popups == 0)
+        #expect(HeadlessTestHost.hasNoAppWindows)
+    }
+
+    private func installChannelProbe(in directory: URL) throws {
+        let worker = directory.appendingPathComponent("ora_background.js")
+        try (String(contentsOf: worker, encoding: .utf8) + """
+
+        chrome.runtime.onMessage.addListener((message, sender, reply) => {
+          if (!message.oraChannelProbe) return false;
+          if (message.oraChannelProbe === 'capture') {
+            // Synthetic channel, never a real Apple session. Exercise the shipped vendor cipher.
+            g_secretSession.I = new sjcl.bn('0x123456789abcdef');
+            g_secretSession.encKey = [1,2,3,4];
+            g_secretSession.shouldUseBase64 = true;
+            g_secretSession.protocolVersion = 1;
+            setGlobalState(ContextState.SessionKeySet);
+            const encrypted = JSON.parse(g_secretSession.createSMSG('fixture-only'));
+            const words = g_secretSession.stringToBits(encrypted.SDATA);
+            const length = sjcl.bitArray.bitLength(words);
+            // Apple's outgoing packets put the nonce last; incoming helper replies put it first.
+            // Use the real cipher, then format its synthetic packet for the helper's direction.
+            encrypted.SDATA = g_secretSession.bitsToString(sjcl.bitArray.concat(
+              sjcl.bitArray.bitSlice(words, length - 128), sjcl.bitArray.bitSlice(words, 0, length - 128)));
+            reply({ok:true, cipher:JSON.stringify(encrypted)});
+          } else {
+            let ok = false;
+            let code = null;
+            try { ok = g_theState === ContextState.SessionKeySet && g_secretSession.pinIsNonEmpty() === 0 && g_secretSession.parseSMSG(message.cipher) === 'fixture-only'; } catch (error) { code = error.code || error.name; }
+            reply({ok, state:g_theState, error:code});
+          }
+          return false;
+        });
+        """).write(to: worker, atomically: true, encoding: .utf8)
+        try """
+        document.addEventListener('oraChannelProbe', async () => {
+          try {
+          const result = await chrome.runtime.sendMessage({oraChannelProbe:document.documentElement.dataset.oraProbeMode,
+            cipher:document.documentElement.dataset.oraFixtureCipher});
+          if (result.cipher) document.documentElement.dataset.oraFixtureCipher = result.cipher;
+          document.documentElement.dataset.oraProbeResult = String(result.ok);
+          document.documentElement.dataset.oraProbeState = result.state || '';
+          document.documentElement.dataset.oraProbeCode = result.error || '';
+          } catch (error) { document.documentElement.dataset.oraProbeError = error.name; }
+        });
+        document.documentElement.dataset.oraProbeReady = 'true';
+        """.write(to: directory.appendingPathComponent("channel_probe.js"), atomically: true, encoding: .utf8)
+        let manifestURL = directory.appendingPathComponent("manifest.json")
+        var manifest = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any])
+        var scripts = try #require(manifest["content_scripts"] as? [[String: Any]])
+        scripts.append(["matches": ["http://127.0.0.1/*"], "js": ["channel_probe.js"]])
+        manifest["content_scripts"] = scripts
+        try JSONSerialization.data(withJSONObject: manifest).write(to: manifestURL)
+    }
+
     @Test func upgradesPairingPopupWithoutRewritingVendorOrSessionFiles() throws {
         guard let source = ProcessInfo.processInfo.environment["ORA_APPLE_EXTENSION_PATH"] else { return }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -250,7 +387,6 @@ struct PasswordExtensionTests {
             at: URL(fileURLWithPath: source).appendingPathComponent("page_popup.html"),
             to: html
         )
-        let worker = try Data(contentsOf: directory.appendingPathComponent("ora_background.js"))
         let completion = try Data(contentsOf: directory.appendingPathComponent("completion_list.js"))
         let sentinel = directory.appendingPathComponent("synthetic-state.txt")
         try Data("fixture-only".utf8).write(to: sentinel)
@@ -258,7 +394,10 @@ struct PasswordExtensionTests {
         let adapted = try Data(contentsOf: html)
         try ApplePasswordCompatibility.prepare(directory: directory)
         #expect(try Data(contentsOf: html) == adapted)
-        #expect(try Data(contentsOf: directory.appendingPathComponent("ora_background.js")) == worker)
+        #expect(try String(contentsOf: directory.appendingPathComponent("ora_background.js"), encoding: .utf8)
+            .contains("oraNativeMessage"))
+        #expect(try Data(contentsOf: directory.appendingPathComponent("background.js")) ==
+            Data(contentsOf: URL(fileURLWithPath: source).appendingPathComponent("background.js")))
         #expect(try Data(contentsOf: directory.appendingPathComponent("completion_list.js")) == completion)
         #expect(try Data(contentsOf: sentinel) == Data("fixture-only".utf8))
         #expect(try String(contentsOf: html, encoding: .utf8).components(separatedBy: "ora_popup.js").count == 2)
@@ -282,7 +421,7 @@ struct PasswordExtensionTests {
         try await verifyApplePopup(startAutomatically: false)
     }
 
-    private func verifyApplePopup(startAutomatically: Bool) async throws {
+    private func verifyApplePopup(startAutomatically: Bool, automaticCode: Bool = false) async throws {
         guard #available(macOS 15.4, *),
               let source = ProcessInfo.processInfo.environment["ORA_APPLE_EXTENSION_PATH"],
               let fixture = ProcessInfo.processInfo.environment["ORA_WEB_FIXTURE_URL"] else { return }
@@ -308,6 +447,7 @@ struct PasswordExtensionTests {
         var presentations = 0
         let runtime = PasswordExtensionRuntime(
             persistent: false, automaticallyUnlock: startAutomatically,
+            automaticallyPair: automaticCode,
             popupPresenter: {
                 action = $0
                 popupView = $0.popupWebView
@@ -358,9 +498,13 @@ struct PasswordExtensionTests {
         #expect(try await view
             .evaluateJavaScript("document.querySelector('#divPINMessage').textContent.length > 0") as? Bool == true)
         try await verifyPopupFocus(view: view, page: page, helper: helper)
+        if automaticCode {
+            try await verifyPopupAppearance(view)
+            try await verifyAutomaticCode(view: view, helper: helper)
+        }
         // Offscreen WebKit pauses animation timelines. Finish the vendor's opacity fade before readback.
         _ = try await view.evaluateJavaScript("document.getAnimations().forEach(animation => animation.finish())")
-        if let path = ProcessInfo.processInfo.environment["ORA_PREVIEW_DIRECTORY"] {
+        if !automaticCode, let path = ProcessInfo.processInfo.environment["ORA_PREVIEW_DIRECTORY"] {
             let image = try await view.takeSnapshot(configuration: nil)
             let bitmap = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
             let data = try #require(bitmap.representation(using: .png, properties: [:]))
@@ -368,16 +512,90 @@ struct PasswordExtensionTests {
                 startAutomatically ? "apple-passwords-startup.png" : "apple-passwords-field-popup.png"
             ))
         }
+        try await refreshLoginPage(page)
+        #expect(presentations == 1)
+        #expect(helper.starts == 1)
+        if !automaticCode {
+            #expect(try await view.evaluateJavaScript("document.querySelector('#PIN0').value") as? String == "1")
+        }
+        if automaticCode {
+            #expect(helper.codeReads == 1)
+        }
+        #expect(HeadlessTestHost.hasNoAppWindows)
+    }
+
+    private func refreshLoginPage(_ page: BrowserPage) async throws {
         for _ in 0 ..< 3 {
             page.reload()
             try await poll(page, "!!document.querySelector('[type=password]')")
             page.activatePasswordExtensions()
             try await Task.sleep(nanoseconds: 100_000_000)
         }
-        #expect(presentations == 1)
-        #expect(helper.starts == 1)
-        #expect(try await view.evaluateJavaScript("document.querySelector('#PIN0').value") as? String == "1")
-        #expect(HeadlessTestHost.hasNoAppWindows)
+    }
+
+    @available(macOS 15.4, *)
+    private func verifyAutomaticCode(view: WKWebView, helper: ApplePopupFixtureConnection) async throws {
+        // Keep the actual vendor submission function. Observe its extension-only port message
+        // without forwarding a synthetic challenge to the real system helper.
+        _ = try await view.evaluateJavaScript("""
+        window.sendMessageToBackgroundPage = message => {
+          if (message.subject === 'userEnteredPIN' && message.pin === '482913') {
+            document.documentElement.dataset.oraSubmitted = 'true';
+          }
+        };
+        mapOverPINFields(field => field.value = '');
+        updatePopupContents(ContextState.MSG1Set);
+        true;
+        """)
+        for _ in 0 ..< 120 {
+            if await (try? view
+                .evaluateJavaScript("document.documentElement.dataset.oraSubmitted === 'true'")) as? Bool ==
+                true
+            {
+                break
+            }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        #expect(try await view
+            .evaluateJavaScript("document.documentElement.dataset.oraSubmitted === 'true'") as? Bool == true)
+        #expect(helper.codeReads == 1)
+        #expect(try await view.callAsyncJavaScript(
+            "return window.oraSubmitPairingCode(code)",
+            arguments: ["code": "482913"],
+            in: nil,
+            contentWorld: .page
+        ) as? Bool == false)
+    }
+
+    private func verifyPopupAppearance(_ view: WKWebView) async throws {
+        for (name, dark, background) in [
+            (NSAppearance.Name.darkAqua, true, "rgb(38, 38, 38)"),
+            (.aqua, false, "rgb(250, 250, 250)"),
+            (.darkAqua, true, "rgb(38, 38, 38)")
+        ] {
+            view.appearance = NSAppearance(named: name)
+            for _ in 0 ..< 120 {
+                if await (
+                    try? view.evaluateJavaScript("matchMedia('(prefers-color-scheme: dark)').matches")
+                ) as? Bool ==
+                    dark
+                {
+                    break
+                }
+                try await Task.sleep(nanoseconds: 25_000_000)
+            }
+            #expect(try await view
+                .evaluateJavaScript("getComputedStyle(document.body).backgroundColor") as? String == background)
+            #expect(try await view.evaluateJavaScript("document.querySelector('#PIN0').value") as? String == "1")
+            _ = try await view.evaluateJavaScript("document.getAnimations().forEach(animation => animation.finish())")
+            if let path = ProcessInfo.processInfo.environment["ORA_PREVIEW_DIRECTORY"] {
+                let image = try await view.takeSnapshot(configuration: nil)
+                let bitmap = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+                try #require(bitmap.representation(using: .png, properties: [:])).write(to:
+                    URL(fileURLWithPath: path)
+                        .appendingPathComponent(dark ? "apple-passwords-dark.png" : "apple-passwords-light.png"))
+            }
+        }
     }
 
     @available(macOS 15.4, *)
@@ -432,6 +650,12 @@ private final class ApplePopupFixtureConnection: PasswordMessageConnection {
     var onDisconnect: ((Error?) -> Void)?
     var commands: [Int] = []
     var starts = 0
+    var codeReads = 0
+    func readPairingCode() async throws -> String {
+        codeReads += 1
+        return "482913"
+    }
+
     func start() throws {
         starts += 1
     }
@@ -455,6 +679,47 @@ private final class ApplePopupFixtureConnection: PasswordMessageConnection {
     }
 
     func close() {}
+}
+
+@MainActor
+private final class RestorableChannelFixture { var saved: [String: Any]? }
+
+@MainActor
+private final class RestorableChannelConnection: PasswordMessageConnection {
+    var onMessage: ((Any) -> Void)?
+    var onDisconnect: ((Error?) -> Void)?
+    private let channel: RestorableChannelFixture
+    init(_ channel: RestorableChannelFixture) {
+        self.channel = channel
+    }
+
+    func start() throws {}
+    func close() {
+        onMessage = nil
+        onDisconnect = nil
+    }
+
+    func send(_ message: Any) throws {
+        guard let message = message as? [String: Any] else { return }
+        if let saved = message["oraSessionStore"] as? [String: Any] {
+            channel.saved = saved
+        }
+        if message["cmd"] as? Int == 14 {
+            Task {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                var reply: [String: Any] = ["cmd": 14, "capabilities": [
+                    "shouldUseBase64": true,
+                    "operatingSystem": [
+                        "name": "macos",
+                        "majorVersion": 27,
+                        "minorVersion": 0
+                    ]
+                ]]
+                reply["oraRetainedSession"] = channel.saved
+                onMessage?(reply)
+            }
+        }
+    }
 }
 
 private final class TerminatedPageDelegate: BrowserPageDelegate {

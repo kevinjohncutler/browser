@@ -257,7 +257,7 @@ class SettingsStore: ObservableObject {
                     {
                         PasswordExtensionRuntime.shared.startIfInstalled()
                     } else {
-                        PasswordExtensionRuntime.shared.shutdown()
+                        await PasswordExtensionRuntime.shared.lock()
                     }
                 }
             }

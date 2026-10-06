@@ -13,7 +13,7 @@ from server import Store, handle
 def test_schema_defaults_and_atomic_validation(tmp_path):
     store = Preferences(tmp_path)
     schema = store.call("list_settings_schema", {})
-    assert len(schema["settings"]) == 59
+    assert len(schema["settings"]) == 60
     for definition in schema["settings"]:
         key = definition["id"].replace("{spaceId}", "11111111-1111-1111-1111-111111111111")
         store.validate_patch({key: definition["schema"]["default"]})

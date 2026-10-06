@@ -328,6 +328,19 @@
       "defaultsKey": "settings.passwords.provider"
     },
     {
+      "id": "passwords.apple.automaticPairing",
+      "title": "Automatic Apple Passwords pairing",
+      "description": "Enter Apple's fresh pairing code after macOS authentication, using a one-time Accessibility permission. No code or password is cached.",
+      "category": "Passwords",
+      "scope": "global",
+      "apply": "live",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "defaultsKey": "passwords.apple.automaticPairing"
+    },
+    {
       "id": "search.defaultEngine",
       "title": "Default search provider",
       "description": "Default search provider.",

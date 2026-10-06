@@ -5,20 +5,36 @@ import SwiftUI
 struct ApplePasswordsExtensionSettings: View {
     @ObservedObject private var runtime = PasswordExtensionRuntime.shared
     @State private var error: String?
+    @AppStorage("passwords.apple.automaticPairing") private var automaticPairing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(runtime.status).font(.caption).foregroundStyle(.secondary)
             Text(
-                "Apple Passwords stays connected as you browse. Google Chrome must be installed as a hidden local helper."
+                "Apple Passwords pairing stays in a private background helper when Ora quits, until reboot or Apple's session expires. Apple still authorizes saved credential access. Google Chrome is required as a hidden local helper."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+            Toggle("Enter Apple's pairing code automatically after Touch ID", isOn: $automaticPairing)
+            Text(
+                "Requires a one-time Accessibility permission for Ora's password helper. Apple can still request authentication when filling a saved password."
             )
             .font(.caption).foregroundStyle(.secondary)
             HStack {
-                Button("Install Apple Passwords extension") { install() }
                 Button("Unlock Apple Passwords") { runtime.showAction() }
+                Button("Lock Apple Passwords") { Task { await runtime.lock() } }
                     .disabled(runtime.context == nil)
                 Button("Manage passwords") {
                     NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Passwords.app"))
+                }
+            }
+            HStack {
+                Button("Install Apple Passwords extension") { install() }
+                Button("Accessibility settings") {
+                    if let url =
+                        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+                    {
+                        NSWorkspace.shared.open(url)
+                    }
                 }
             }
             if let error {

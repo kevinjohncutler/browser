@@ -18,7 +18,7 @@ enum NativePreferenceAdapter {
             {
                 PasswordExtensionRuntime.shared.startIfInstalled()
             } else {
-                PasswordExtensionRuntime.shared.shutdown()
+                Task { await PasswordExtensionRuntime.shared.lock() }
             }
         }
         if changed.contains("shortcuts.overrides") {

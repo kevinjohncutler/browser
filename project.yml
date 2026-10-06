@@ -128,6 +128,7 @@ targets:
         com.apple.security.temporary-exception.mach-lookup.global-name:
           - "$(PRODUCT_BUNDLE_IDENTIFIER)-spks"
           - "$(PRODUCT_BUNDLE_IDENTIFIER)-spki"
+          - "$(PRODUCT_BUNDLE_IDENTIFIER).PasswordSession"
         com.apple.developer.web-browser: true
         com.apple.developer.web-browser.public-key-credential: true
 
@@ -195,6 +196,8 @@ targets:
     sources:
       - path: oraTests
       - path: integration/ora-passwords/BridgeService/ChromePasswordTransport.swift
+      - path: integration/ora-passwords/BridgeService/ApplePasswordPairingReader.swift
+      - path: integration/ora-passwords/BridgeService/RetainedPasswordSession.swift
     dependencies:
       - target: ora
     settings:

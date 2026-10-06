@@ -30,6 +30,10 @@ final class ChromePasswordTransport {
     init() {}
     var onProcessStarted: (() -> Void)?
 
+    func processForPairing(_ identifier: String) -> pid_t? {
+        callbacks[identifier] != nil && child > 0 ? child : nil
+    }
+
     func open(
         _ identifier: String,
         publicKey: String,

@@ -8,6 +8,18 @@ protocol PasswordMessageConnection: AnyObject {
     func start() throws
     func send(_ message: Any) throws
     func close()
+    func readPairingCode() async throws -> String
+    func endSession() async
+}
+
+extension PasswordMessageConnection {
+    func readPairingCode() async throws -> String {
+        throw CocoaError(.featureUnsupported)
+    }
+
+    func endSession() async {
+        close()
+    }
 }
 
 extension NativePasswordMessaging: PasswordMessageConnection {}
@@ -24,11 +36,13 @@ final class LocalPasswordMessaging: NSObject, PasswordMessageConnection, Passwor
     private var queueBytes = 0
     private var startupTimeout: Task<Void, Never>?
     private let publicKey: String?
+    private let retainsSession: Bool
     var onMessage: ((Any) -> Void)?
     var onDisconnect: ((Error?) -> Void)?
 
-    init(publicKey: String? = nil) {
+    init(publicKey: String? = nil, retainsSession: Bool = true) {
         self.publicKey = publicKey
+        self.retainsSession = retainsSession
     }
 
     func start() throws {
@@ -45,7 +59,8 @@ final class LocalPasswordMessaging: NSObject, PasswordMessageConnection, Passwor
         }
         guard let bundle = Bundle.main.bundleIdentifier else { throw CocoaError(.fileReadUnknown) }
         let service = bundle + ".PasswordBridge"
-        let connection = NSXPCConnection(serviceName: service)
+        let connection = retainsSession ? NSXPCConnection(machServiceName: bundle + ".PasswordSession", options: []) :
+            NSXPCConnection(serviceName: service)
         connection.remoteObjectInterface = NSXPCInterface(with: PasswordBridgeServiceProtocol.self)
         connection.exportedInterface = NSXPCInterface(with: PasswordBridgeClientProtocol.self)
         connection.exportedObject = self
@@ -111,6 +126,66 @@ final class LocalPasswordMessaging: NSObject, PasswordMessageConnection, Passwor
         guard !closed else { return }
         remote()?.close(identifier)
         finish(nil)
+    }
+
+    func readPairingCode() async throws -> String {
+        guard ready, !closed else { throw CocoaError(.fileReadUnknown) }
+        return try await withCheckedThrowingContinuation { continuation in
+            guard let connection else {
+                continuation.resume(throwing: CocoaError(.fileReadUnknown))
+                return
+            }
+            let proxy = connection.remoteObjectProxyWithErrorHandler { _ in
+                continuation.resume(throwing: CocoaError(.fileReadUnknown))
+            } as? PasswordBridgeServiceProtocol
+            guard let proxy else {
+                continuation.resume(throwing: CocoaError(.fileReadUnknown))
+                return
+            }
+            proxy.readPairingCode(identifier) { code, error in
+                if let code, code.count == 6, code.allSatisfy({ $0.isASCII && $0.isNumber }) {
+                    continuation.resume(returning: code)
+                } else {
+                    continuation.resume(throwing: NSError(
+                        domain: "OraPasswordPairing",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: error ??
+                            "Apple's pairing code is not available."]
+                    ))
+                }
+            }
+        }
+    }
+
+    func sessionStatus() async -> (Bool, Int32) {
+        guard ready, !closed else { return (false, 0) }
+        return await withCheckedContinuation { continuation in
+            guard let connection else { continuation.resume(returning: (false, 0))
+                return
+            }
+            let proxy = connection.remoteObjectProxyWithErrorHandler { _ in
+                continuation.resume(returning: (false, 0))
+            } as? PasswordBridgeServiceProtocol
+            guard let proxy else { continuation.resume(returning: (false, 0))
+                return
+            }
+            proxy.sessionStatus(identifier) { retained, pid in continuation.resume(returning: (retained, pid)) }
+        }
+    }
+
+    func endSession() async {
+        guard ready, !closed else { return }
+        await withCheckedContinuation { continuation in
+            guard let connection else { continuation.resume()
+                return
+            }
+            let proxy = connection.remoteObjectProxyWithErrorHandler { _ in continuation.resume() }
+                as? PasswordBridgeServiceProtocol
+            guard let proxy else { continuation.resume()
+                return
+            }
+            proxy.endSession(identifier) { continuation.resume() }
+        }
     }
 
     nonisolated func received(_ message: Data, identifier: String) {

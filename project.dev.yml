@@ -37,6 +37,7 @@ targets:
         com.apple.security.temporary-exception.mach-lookup.global-name:
         - $(PRODUCT_BUNDLE_IDENTIFIER)-spks
         - $(PRODUCT_BUNDLE_IDENTIFIER)-spki
+        - $(PRODUCT_BUNDLE_IDENTIFIER).PasswordSession
   PasswordBridge:
     settings:
       base:

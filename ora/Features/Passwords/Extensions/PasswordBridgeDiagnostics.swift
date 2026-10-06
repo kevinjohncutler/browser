@@ -29,16 +29,87 @@
         static func runIfRequested() -> Bool {
             let environment = ProcessInfo.processInfo.environment
             let vendor = environment["ORA_PASSWORD_EXTENSION_BRIDGE_PROBE"] == "1"
-            guard vendor || environment["ORA_PASSWORD_BRIDGE_PROBE"] == "1" else { return false }
+            let reopen = environment["ORA_PASSWORD_SESSION_REOPEN_PROBE"]
+            guard vendor || reopen != nil || environment["ORA_PASSWORD_BRIDGE_PROBE"] == "1" else { return false }
             let application = NSApplication.shared
             application.setActivationPolicy(.prohibited)
             Task { @MainActor in
-                let succeeded = vendor ? await probeVendor(application) : await probeTransport()
+                let succeeded: Bool = if let reopen {
+                    await probeReopen(stage: reopen)
+                } else {
+                    vendor ? await probeVendor(application) : await probeTransport()
+                }
                 fflush(stdout)
                 exit(succeeded ? 0 : 1)
             }
             application.run()
             return true
+        }
+
+        /// An initially empty background agent only. No pairing or credential command reaches Apple.
+        private static func probeReopen(stage: String) async -> Bool {
+            guard stage == "store" || stage == "resume" else { return false }
+            let connection = LocalPasswordMessaging()
+            defer { connection.close() }
+            var hello: [String: Any]?
+            var error: Error?
+            connection.onMessage = { hello = $0 as? [String: Any] }
+            connection.onDisconnect = { error = $0 }
+            do {
+                try connection.start()
+                try connection.send(["cmd": 14])
+                for _ in 0 ..< 600 {
+                    if hello != nil || error != nil {
+                        break
+                    }
+                    try await Task.sleep(nanoseconds: 25_000_000)
+                }
+                guard let hello, error == nil else { return false }
+                if stage == "store" {
+                    guard hello["oraRetainedSession"] == nil else {
+                        print("Reopen probe refused to replace an existing pairing.")
+                        return false
+                    }
+                    try connection.send(["oraSessionStore": ["version": 1, "session": [
+                        "I": "0x123456789abcdef", "encKey": [1, 2, 3, 4], "shouldUseBase64": true, "protocolVersion": 1
+                    ]]])
+                } else {
+                    guard let state = hello["oraRetainedSession"] as? [String: Any],
+                          let channel = state["session"] as? [String: Any],
+                          channel["I"] as? String == "0x123456789abcdef",
+                          channel["encKey"] as? [Int] == [1, 2, 3, 4]
+                    else {
+                        print("Reopen probe did not receive the synthetic channel.")
+                        return false
+                    }
+                }
+                var status = await connection.sessionStatus()
+                for _ in 0 ..< 60 {
+                    if status.0 {
+                        break
+                    }
+                    try await Task.sleep(nanoseconds: 25_000_000)
+                    status = await connection.sessionStatus()
+                }
+                guard status.0, status.1 > 0 else { return false }
+                if stage == "resume" {
+                    try connection.send(["oraSessionClear": true])
+                    for _ in 0 ..< 60 {
+                        if await !(connection.sessionStatus()).0 {
+                            break
+                        }
+                        try await Task.sleep(nanoseconds: 25_000_000)
+                    }
+                    guard await !(connection.sessionStatus()).0 else { return false }
+                }
+                // Process identity is metadata. Never print the retained channel or its keys.
+                print(
+                    "{\"stage\":\"\(stage)\",\"retained\":true,\"chromePID\":\(status.1),\"credentialsRequested\":false}"
+                )
+                return true
+            } catch { print("Background session probe failed.")
+                return false
+            }
         }
 
         private static func probeVendor(_ application: NSApplication) async -> Bool {

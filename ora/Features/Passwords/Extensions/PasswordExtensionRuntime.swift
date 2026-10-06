@@ -20,23 +20,35 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
     private var helperReady = false
     private var startupUnlockPending = false
     private var startupUnlockTask: Task<Void, Never>?
+    private var pairingTask: Task<Void, Never>?
+    private var appearanceObserver: NSKeyValueObservation?
+    private weak var popupWebView: WKWebView?
     private let automaticallyUnlock: Bool
+    private let automaticallyPair: Bool
+    private let pairingPreferenceOverride: Bool?
     private let popupPresenter: ((WKWebExtension.Action) -> Void)?
     private let makeNativeConnection: () -> any PasswordMessageConnection
 
     init(
         persistent: Bool = true,
         automaticallyUnlock: Bool? = nil,
+        automaticallyPair: Bool? = nil,
         popupPresenter: ((WKWebExtension.Action) -> Void)? = nil,
         makeNativeConnection: (@MainActor () -> any PasswordMessageConnection)? = nil
     ) {
         controller = WKWebExtensionController(configuration: persistent ? .default() : .nonPersistent())
         self.automaticallyUnlock = automaticallyUnlock ??
             (persistent && ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] != "1")
+        self.automaticallyPair = automaticallyPair ??
+            (persistent && ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] != "1")
+        self.pairingPreferenceOverride = automaticallyPair
         self.popupPresenter = popupPresenter
         self.makeNativeConnection = makeNativeConnection ?? { LocalPasswordMessaging() }
         super.init()
         controller.delegate = self
+        appearanceObserver = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in self?.updatePopupAppearance() }
+        }
     }
 
     func configure(_ configuration: WKWebViewConfiguration, isPrivate: Bool) {
@@ -144,9 +156,14 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
     func showAction() {
         if let popup, popup.isShown {
             popup.contentViewController?.view.window?.makeKey()
+            if let view = popupWebView {
+                pairAutomatically(in: view)
+            }
             return
         }
-        guard let context else { return }
+        guard let context else { startIfInstalled()
+            return
+        }
         context.performAction(for: windows.first?.items.first)
     }
 
@@ -170,6 +187,9 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
     }
 
     func shutdown() {
+        pairingTask?.cancel()
+        pairingTask = nil
+        popupWebView = nil
         startupUnlockTask?.cancel()
         startupUnlockTask = nil
         startupUnlockPending = false
@@ -184,6 +204,56 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
             try? controller.unload(context)
         }
         context = nil
+    }
+
+    func lock() async {
+        pairingTask?.cancel()
+        if let connection = connections.values.first {
+            await connection.endSession()
+        }
+        shutdown()
+        status = "Apple Passwords pairing cleared. Unlock to start a new session."
+    }
+
+    private func updatePopupAppearance() {
+        // Extension popovers can have an independent light appearance without an explicit update.
+        popupWebView?.appearance = NSApp.effectiveAppearance
+        popup?.appearance = NSApp.effectiveAppearance
+    }
+
+    private func pairAutomatically(in view: WKWebView) {
+        guard automaticallyPair, pairingTask == nil,
+              pairingPreferenceOverride ?? UserDefaults.standard.bool(forKey: "passwords.apple.automaticPairing")
+        else { return }
+        pairingTask = Task { [weak self, weak view] in
+            defer { self?.pairingTask = nil }
+            for _ in 0 ..< 240 {
+                guard let self, let view, !Task.isCancelled else { return }
+                guard pairingPreferenceOverride ?? UserDefaults.standard
+                    .bool(forKey: "passwords.apple.automaticPairing") else { return }
+                // Wait for Apple's reply to the challenge before entering any code.
+                if await (try? view.evaluateJavaScript("window.oraCanSubmitPairingCode?.() === true")) as? Bool ==
+                    true
+                {
+                    guard let connection = connections.values.first else { return }
+                    do {
+                        let code = try await connection.readPairingCode()
+                        guard !Task.isCancelled, popupWebView === view,
+                              pairingPreferenceOverride ?? UserDefaults.standard
+                              .bool(forKey: "passwords.apple.automaticPairing") else { return }
+                        let submitted = try await view.callAsyncJavaScript(
+                            "return window.oraSubmitPairingCode(code)", arguments: ["code": code],
+                            in: nil, contentWorld: .page
+                        ) as? Bool == true
+                        // Submission is not proof that Apple's encrypted handshake succeeded.
+                        status = submitted ? "Pairing code entered. Waiting for Apple Passwords." :
+                            "Automatic code entry paused because the pairing form changed."
+                    } catch { status = error.localizedDescription }
+                    return
+                }
+                do { try await Task.sleep(nanoseconds: 50_000_000) } catch { return }
+            }
+        }
     }
 
     func webExtensionController(
@@ -228,6 +298,10 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
             self?.status = "Connected to Apple's password helper."
             if (message as? [String: Any])?["cmd"] as? Int == 14 {
                 self?.helperReady = true
+                if (message as? [String: Any])?["oraRetainedSession"] != nil {
+                    self?.startupUnlockPending = false
+                    self?.status = "Apple Passwords pairing restored. Apple authenticates saved credential access."
+                }
                 self?.scheduleStartupUnlock()
             }
             port.sendMessage(message) {
@@ -256,6 +330,12 @@ final class PasswordExtensionRuntime: NSObject, ObservableObject, WKWebExtension
         let popover = action.popupPopover
         popover?.behavior = .applicationDefined
         popover?.animates = false
+        popupWebView = action.popupWebView
+        popover?.appearance = NSApp.effectiveAppearance
+        updatePopupAppearance()
+        if let view = action.popupWebView {
+            pairAutomatically(in: view)
+        }
         if let popupPresenter {
             popupPresenter(action)
             completionHandler(nil)

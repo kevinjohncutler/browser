@@ -83,9 +83,11 @@ enum ApplePasswordCompatibility {
     /// Refocusing a pairing popup must not replay the vendor state handler and erase entered digits.
     static let popupFocus = """
     (() => {
+      let currentState;
       const pairingVisible = () => document.getElementById('divPIN')?.getBoundingClientRect().height > 0;
       const vendorUpdate = window.updatePopupContents;
       window.updatePopupContents = async function(state) {
+        currentState = state;
         // Repeated state broadcasts also occur when the active browser tab changes.
         // Keep entered digits during the same challenge, and forward every non-pairing transition.
         if ((state === ContextState.ChallengeSent || state === ContextState.MSG1Set) && pairingVisible()) return;
@@ -96,14 +98,109 @@ enum ApplePasswordCompatibility {
         if (pairingVisible()) return;
         return vendorFocus?.call(this, event);
       };
+      window.oraCanSubmitPairingCode = () => currentState === ContextState.MSG1Set && pairingVisible();
+      window.oraSubmitPairingCode = code => {
+        if (!window.oraCanSubmitPairingCode() || !/^[0-9]{6}$/.test(code)) return false;
+        const fields = Array.from(document.querySelectorAll('input.PIN'));
+        // Do not replace a code the user has started entering, or submit twice.
+        if (fields.length !== 6 || fields.some(field => field.disabled || field.value !== '')) return false;
+        fields.forEach((field, index) => field.value = code[index]);
+        submitPINFromFields();
+        return true;
+      };
     })();
     """
+
+    static let popupCSS = """
+    :root { color-scheme: light dark; }
+    body.popup { min-height: 210px; }
+    @media (prefers-color-scheme: dark) {
+      body.popup {
+        --background-color: #262626;
+        --text-color: #f5f5f5;
+        --pin-input-background-color: #171717;
+        --pin-input-border-color: #737373;
+        --need-to-pair-message-color: #f5f5f5;
+        --from-icloud-passwords-background-color: #404040;
+        --from-icloud-passwords-text-color: #e5e5e5;
+      }
+    }
+    @media (prefers-color-scheme: light) {
+      body.popup .dismiss { filter: none; }
+      body.popup {
+        --background-color: #fafafa;
+        --text-color: #171717;
+        --pin-input-background-color: #ffffff;
+        --pin-input-border-color: #737373;
+        --need-to-pair-message-color: #171717;
+        --from-icloud-passwords-background-color: #e5e5e5;
+        --from-icloud-passwords-text-color: #404040;
+      }
+    }
+    """
+
+    /// Only the channel key and transaction identifier survive browser process exits.
+    /// The native helper remains authoritative for credential release and session expiration.
+    static let retainedSession = """
+    function oraNativeMessage(listener) {
+      return message => {
+        // The vendor's hello handler is synchronous. Restore before yielding the native event.
+        // Keep the vendor's promise for credential operations without an extra worker microtask.
+        const result = listener(message);
+        const snapshot = message.cmd === 14 && message.oraRetainedSession;
+        if (!snapshot || snapshot.version !== 1) return result;
+        const saved = snapshot.session;
+        if (!saved || typeof saved.I !== 'string' || !/^0x[0-9a-f]{1,32}$/i.test(saved.I) ||
+            !Array.isArray(saved.encKey) || saved.encKey.length !== 4) return result;
+        const session = Object.create(SecretSession.prototype);
+        Object.assign(session, {I:new sjcl.bn(saved.I), encKey:saved.encKey,
+          shouldUseBase64:saved.shouldUseBase64, protocolVersion:saved.protocolVersion,
+          keyLen:128, tagLen:128, P:''});
+        g_secretSession = session;
+        setGlobalState(ContextState.SessionKeySet);
+        return result;
+      };
+    }
+    (() => {
+      let hadSession = false;
+      const update = setGlobalState;
+      setGlobalState = function(state, quiet) {
+        update(state, quiet);
+        if (state === ContextState.SessionKeySet && g_secretSession?.encKey) {
+          g_nativeAppPort.postMessage({oraSessionStore:{version:1, session:{
+            I:g_secretSession.I.toString(), encKey:g_secretSession.encKey,
+            shouldUseBase64:g_secretSession.shouldUseBase64,
+            protocolVersion:g_secretSession.protocolVersion}}});
+          hadSession = true;
+        } else if (hadSession) {
+          hadSession = false;
+          g_nativeAppPort.postMessage({oraSessionClear:true});
+        }
+      };
+    })();
+    """
+
+    private static func prepareBackground(directory: URL, worker: String) throws {
+        var script = try String(contentsOf: directory.appendingPathComponent(worker), encoding: .utf8)
+        let listener = ".onMessage.addListener((async function(e){"
+        let suspend = "g_nativeAppPort.postMessage({cmd:0})"
+        guard script.components(separatedBy: listener).count == 2,
+              script.components(separatedBy: suspend).count == 2 else { throw CocoaError(.fileReadCorruptFile) }
+        script = script.replacingOccurrences(
+            of: listener,
+            with: ".onMessage.addListener(oraNativeMessage(async function(e){"
+        )
+        .replacingOccurrences(of: suspend, with: "g_nativeAppPort.postMessage({oraDetach:true})")
+        try (background + "\n" + localizedScript(script) + "\n" + retainedSession).write(
+            to: directory.appendingPathComponent("ora_background.js"), atomically: true, encoding: .utf8
+        )
+    }
 
     private static func preparePopup(directory: URL) throws {
         let html = directory.appendingPathComponent("page_popup.html")
         guard FileManager.default.fileExists(atPath: html.path) else { return }
         try popupFocus.write(to: directory.appendingPathComponent("ora_popup.js"), atomically: true, encoding: .utf8)
-        try "body.popup { min-height: 210px; }".write(
+        try popupCSS.write(
             to: directory.appendingPathComponent("ora_popup.css"), atomically: true, encoding: .utf8
         )
         let original = try String(contentsOf: html, encoding: .utf8)
@@ -121,13 +218,14 @@ enum ApplePasswordCompatibility {
     static func prepare(directory: URL) throws {
         let versionFile = directory.appendingPathComponent("ora_compatibility_version")
         let version = try? String(contentsOf: versionFile, encoding: .utf8)
-        if version == "3" {
+        if version == "5" {
             return
         }
-        if version == "2" {
-            // Do not re-adapt already patched vendor scripts or replace extension session storage.
+        if version == "2" || version == "3" || version == "4" {
+            // Rebuild the generated worker; keep vendor files, completion scripts, and stored preferences.
             try preparePopup(directory: directory)
-            try "3".write(to: versionFile, atomically: true, encoding: .utf8)
+            try prepareBackground(directory: directory, worker: "background.js")
+            try "5".write(to: versionFile, atomically: true, encoding: .utf8)
             return
         }
         let manifestURL = directory.appendingPathComponent("manifest.json")
@@ -139,12 +237,7 @@ enum ApplePasswordCompatibility {
         else { throw CocoaError(.fileReadCorruptFile) }
         // Earlier installations retain the untouched original background beside the generated worker.
         let originalWorker = worker == "ora_background.js" ? "background.js" : worker
-        let script = try String(contentsOf: directory.appendingPathComponent(originalWorker), encoding: .utf8)
-        try (background + "\n" + localizedScript(script)).write(
-            to: directory.appendingPathComponent("ora_background.js"),
-            atomically: true,
-            encoding: .utf8
-        )
+        try prepareBackground(directory: directory, worker: originalWorker)
         backgroundConfig["service_worker"] = "ora_background.js"
         manifest["background"] = backgroundConfig
         let completionURL = directory.appendingPathComponent("completion_list.js")
@@ -183,6 +276,6 @@ enum ApplePasswordCompatibility {
             options: .atomic
         )
         try preparePopup(directory: directory)
-        try "3".write(to: versionFile, atomically: true, encoding: .utf8)
+        try "5".write(to: versionFile, atomically: true, encoding: .utf8)
     }
 }
