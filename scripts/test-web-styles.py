@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Run the actual Ora WebKit tests against a controlled local HTTP fixture."""
 
+import html as html_module
 import os
 import subprocess
 import sys
@@ -22,6 +23,10 @@ class Handler(BaseHTTPRequestHandler):
         html = b"<!doctype html><html><head><title>Ora fixture</title></head><body><h1>Fixture</h1><p>Persistent styles</p></body></html>"
         if self.path == "/login":
             html = b'<!doctype html><html><head><title>Login fixture</title></head><body><form><input autocomplete="username"><input type="password" autocomplete="current-password"></form></body></html>'
+        if self.path == "/user-agent":
+            agent = html_module.escape(self.headers.get("User-Agent", ""))
+            html = ("<!doctype html><html><head><title>Browser identity fixture</title></head>"
+                    "<body><pre id='agent'>" + agent + "</pre></body></html>").encode()
         if self.path == "/styled":
             html = html.replace(
                 b"</head>",
@@ -51,7 +56,7 @@ def main():
     )
     try:
         result = subprocess.run(
-            [str(Path(__file__).resolve().parent / "test-headless.sh")],
+            [str(Path(__file__).resolve().parent / "test-headless.sh"), *sys.argv[1:]],
             env=env,
             check=False,
         )

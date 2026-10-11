@@ -36,7 +36,6 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
             runtime?.configure(webConfiguration, isPrivate: false)
             passwordRuntime = runtime
         }
-        webConfiguration.applicationNameForUserAgent = configuration.userAgent
         webConfiguration.websiteDataStore = profile.dataStore
         webConfiguration.allowsAirPlayForMediaPlayback = configuration.allowsAirPlayForMediaPlayback
         webConfiguration.preferences.setValue(
@@ -66,6 +65,7 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         webConfiguration.userContentController = contentController
         messageNames = configuration.scriptMessageNames
         webView = WKWebView(frame: .zero, configuration: webConfiguration)
+        webView.customUserAgent = configuration.userAgent
         self.delegate = delegate
 
         super.init()
