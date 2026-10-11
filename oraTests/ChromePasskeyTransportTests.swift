@@ -6,6 +6,50 @@ import Testing
 @MainActor
 struct ChromePasskeyTransportTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORA_PASSKEY_TRANSPORT_TEST"] == "1"))
+    func productionBrowserStartsWithoutAnUnrequestedStartupWindow() async throws {
+        let transport = ChromePasskeyTransport()
+        try await transport.testAuthenticationWindowStartup()
+        #expect(transport.profileForTesting == nil)
+        #expect(HeadlessTestHost.hasNoAppWindows)
+    }
+
+    @Test func authenticationRequiresAnOrdinaryVisibleBrowserWindow() {
+        let profile = URL(fileURLWithPath: "/tmp/synthetic-passkey-profile")
+        let authentication = ChromePasskeyTransport.launchArguments(
+            profile: profile,
+            presentation: .authenticationWindow
+        )
+        #expect(!authentication.contains(where: { $0.hasPrefix("--headless") || $0.hasPrefix("--app") }))
+        #expect(authentication.contains("--no-startup-window"))
+        #expect(authentication.contains("--remote-debugging-pipe"))
+        let capability = ChromePasskeyTransport.launchArguments(profile: profile, presentation: .headless)
+        #expect(capability.contains("--headless=new"))
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORA_PASSKEY_TRANSPORT_TEST"] == "1"))
+    func actualHeadlessBrowserHasNoNativePresentationWindowDespiteDOMFocus() async throws {
+        let transport = ChromePasskeyTransport()
+        var inspected = false
+        transport.prepareForTesting = { transport, session in
+            let result = try await transport.testCall("Runtime.evaluate", [
+                "expression": "document.hasFocus() && document.visibilityState === 'visible'",
+                "returnByValue": true
+            ], session: session)
+            #expect((result["result"] as? [String: Any])?["value"] as? Bool == true)
+            #expect(!ChromePasskeyTransport.hasVisibleWindow(process: transport.processForTesting))
+            inspected = true
+        }
+        let data = try await transport.perform(
+            JSONSerialization.data(withJSONObject: ["operation": "available"]),
+            origin: "https://accounts.google.com"
+        )
+        let reply = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(reply["available"] as? Bool == true)
+        #expect(inspected)
+        #expect(HeadlessTestHost.hasNoAppWindows)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORA_PASSKEY_TRANSPORT_TEST"] == "1"))
     func nativeBrowserRejectsAnInvalidRelyingParty() async throws {
         let transport = ChromePasskeyTransport()
         transport.prepareForTesting = { transport, session in
@@ -24,12 +68,17 @@ struct ChromePasskeyTransportTests {
         } catch { #expect(error.localizedDescription == "SecurityError") }
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORA_PASSKEY_TRANSPORT_TEST"] == "1"))
-    func cancelStopsAnInFlightAuthenticatorRequest() async throws {
+    @Test(
+        .enabled(if: ProcessInfo.processInfo.environment["ORA_PASSKEY_TRANSPORT_TEST"] == "1"),
+        arguments: [false, true]
+    )
+    func cancelStopsAnInFlightAuthenticatorRequest(closePage: Bool) async throws {
         let transport = ChromePasskeyTransport()
         var requested = false
+        var browserSession: String?
         transport.onAssertionRequestedForTesting = { requested = true }
         transport.prepareForTesting = { transport, session in
+            browserSession = session
             _ = try await transport.testCall("WebAuthn.enable", ["enableUI": false], session: session)
             _ = try await transport.testCall("WebAuthn.addVirtualAuthenticator", ["options": [
                 "protocol": "ctap2", "transport": "internal", "hasResidentKey": true,
@@ -48,7 +97,11 @@ struct ChromePasskeyTransportTests {
         }
         #expect(requested)
         let profile = try #require(transport.profileForTesting)
-        transport.stop()
+        if closePage {
+            _ = try? await transport.testCall("Page.close", [:], session: #require(browserSession))
+        } else {
+            transport.stop()
+        }
         do {
             _ = try await task.value
             Issue.record("A canceled passkey request returned a credential.")

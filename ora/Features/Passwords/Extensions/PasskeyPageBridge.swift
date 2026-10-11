@@ -1,8 +1,10 @@
 import Foundation
+import OSLog
 import WebKit
 
 @MainActor
 final class PasskeyPageBridge: NSObject, WKScriptMessageHandlerWithReply {
+    private static let logger = Logger(subsystem: "io.orabrowser.passkeys", category: "page")
     private let connection: PasskeyConnection
     private var requestID: String?
     private var generation = 0
@@ -48,6 +50,7 @@ final class PasskeyPageBridge: NSObject, WKScriptMessageHandlerWithReply {
         if operation == "get", ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] != "1",
            message.webView?.window?.isKeyWindow != true
         {
+            Self.logger.error("Rejected a passkey request from an inactive window.")
             replyHandler(["error": "NotAllowedError"], nil)
             return
         }
@@ -56,6 +59,9 @@ final class PasskeyPageBridge: NSObject, WKScriptMessageHandlerWithReply {
             return
         }
         requestID = identifier
+        if operation == "get" {
+            Self.logger.notice("Ora accepted a foreground passkey request.")
+        }
         let current = generation
         let origin = "https://" + security.host
         Task { [weak self] in
@@ -74,6 +80,9 @@ final class PasskeyPageBridge: NSObject, WKScriptMessageHandlerWithReply {
                 }
                 try replyHandler(JSONSerialization.jsonObject(with: reply), nil)
             } catch {
+                if operation == "get" {
+                    Self.logger.error("Ora passkey authentication failed or was canceled.")
+                }
                 let allowed = [
                     "AbortError",
                     "SecurityError",

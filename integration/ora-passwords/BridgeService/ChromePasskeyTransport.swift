@@ -1,11 +1,19 @@
+import AppKit
 import Darwin
 import Foundation
+import OSLog
 import Security
 
 /// Same-origin passkey assertions through an authentic signed browser, over private pipes.
 /// Every request has a disposable profile. No credential keys or assertions are logged.
 @MainActor
 final class ChromePasskeyTransport {
+    enum Presentation {
+        case headless
+        case authenticationWindow
+    }
+
+    private static let logger = Logger(subsystem: "io.orabrowser.passkeys", category: "transport")
     private var child: pid_t = 0
     private var input: FileHandle?
     private var output: FileHandle?
@@ -16,6 +24,7 @@ final class ChromePasskeyTransport {
     private var timeouts: [Int: Task<Void, Never>] = [:]
     private var directory: URL?
     private var reaper: Task<Void, Never>?
+    private var activeSession: String?
     #if DEBUG
         var prepareForTesting: ((ChromePasskeyTransport, String) async throws -> Void)?
         var onAssertionRequestedForTesting: (() -> Void)?
@@ -23,8 +32,29 @@ final class ChromePasskeyTransport {
             directory
         }
 
+        var processForTesting: pid_t {
+            child
+        }
+
         func testCall(_ method: String, _ params: [String: Any], session: String) async throws -> [String: Any] {
             try await call(method, params, session: session)
+        }
+
+        /// Exercises the production launch without creating a window or requesting credentials.
+        func testAuthenticationWindowStartup() async throws {
+            do {
+                try start(presentation: .authenticationWindow)
+                _ = try await call("Browser.getVersion")
+                guard !Self.hasVisibleWindow(process: child) else { throw Self.failure("InvalidStateError") }
+                stop()
+                await reaper?.value
+                reaper = nil
+            } catch {
+                stop()
+                await reaper?.value
+                reaper = nil
+                throw error
+            }
         }
     #endif
 
@@ -42,11 +72,14 @@ final class ChromePasskeyTransport {
         guard child == 0, reaper == nil else { throw Self.failure("NotAllowedError") }
         do {
             let result = try await performRequest(request, origin: origin)
+            Self.logger.notice("Passkey request completed.")
             stop()
             await reaper?.value
             reaper = nil
             return result
         } catch {
+            // Only fixed stage messages are logged, never origins, account names, or request data.
+            Self.logger.error("Passkey request failed or was canceled.")
             stop()
             await reaper?.value
             reaper = nil
@@ -61,11 +94,23 @@ final class ChromePasskeyTransport {
               let operation = options["operation"] as? String,
               operation == "available" || operation == "get" else { throw Self.failure("NotSupportedError") }
         try Task.checkCancellation()
-        try start()
-        let target = try await call("Target.createTarget", ["url": "about:blank"])
+        var presentation: Presentation = operation == "get" ? .authenticationWindow : .headless
+        #if DEBUG
+            // A synthetic authenticator is the only testing path that can suppress native UI.
+            if prepareForTesting != nil {
+                presentation = .headless
+            }
+        #endif
+        try start(presentation: presentation)
+        Self.logger.notice("Passkey browser started.")
+        let target = try await call("Target.createTarget", [
+            "url": "about:blank", "newWindow": presentation == .authenticationWindow,
+            "background": false
+        ])
         guard let targetID = target["targetId"] as? String else { throw Self.failure("NotAllowedError") }
         let attachment = try await call("Target.attachToTarget", ["targetId": targetID, "flatten": true])
         guard let session = attachment["sessionId"] as? String else { throw Self.failure("NotAllowedError") }
+        activeSession = session
         _ = try await call("Page.enable", session: session)
         _ = try await call("Runtime.enable", session: session)
         let navigation = try await call("Page.navigate", ["url": url.absoluteString], session: session)
@@ -86,6 +131,10 @@ final class ChromePasskeyTransport {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         guard let frame else { throw Self.failure("SecurityError") }
+        _ = try await call("Target.activateTarget", ["targetId": targetID])
+        _ = try await call("Page.bringToFront", session: session)
+        try await verifyPresentation(target: targetID, session: session, presentation: presentation)
+        Self.logger.notice("Passkey origin and presentation ready.")
         // Isolate authentication from the destination site's own scripts and credentials hooks.
         let world = try await call("Page.createIsolatedWorld", [
             "frameId": frame, "worldName": "ora-passkeys", "grantUniveralAccess": false
@@ -97,6 +146,9 @@ final class ChromePasskeyTransport {
                 onAssertionRequestedForTesting?()
             }
         #endif
+        if operation == "get" {
+            Self.logger.notice("Requesting native passkey authentication.")
+        }
         let result = try await call("Runtime.callFunctionOn", [
             "functionDeclaration": Self.assertion,
             "executionContextId": context,
@@ -122,6 +174,7 @@ final class ChromePasskeyTransport {
         try? output?.close()
         input = nil
         output = nil
+        activeSession = nil
         buffer.removeAll()
         let requests = pending
         pending.removeAll()
@@ -140,7 +193,63 @@ final class ChromePasskeyTransport {
         directory = nil
     }
 
-    private func start() throws {
+    private func verifyPresentation(target: String, session: String, presentation: Presentation) async throws {
+        // Chromium passes its browser NSWindow to AuthenticationServices. A hidden window
+        // cannot present a usable sheet, and a hidden Chrome account picker can stall forever.
+        // Availability and synthetic tests must still have no visible windows.
+        guard presentation == .authenticationWindow else { return }
+        let window = try await call("Browser.getWindowForTarget", ["targetId": target])
+        guard let id = window["windowId"] as? Int else { throw Self.failure("NotAllowedError") }
+        _ = try await call("Browser.setWindowBounds", [
+            "windowId": id, "bounds": ["windowState": "normal"]
+        ])
+        NSRunningApplication(processIdentifier: child)?.activate(options: [])
+        for _ in 0 ..< 100 {
+            let result = try await call("Runtime.evaluate", [
+                "expression": "document.hasFocus() && document.visibilityState === 'visible'",
+                "returnByValue": true
+            ], session: session)
+            if (result["result"] as? [String: Any])?["value"] as? Bool == true,
+               Self.hasVisibleWindow(process: child)
+            {
+                return
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        Self.logger.error("Passkey authentication window did not become active.")
+        throw Self.failure("NotAllowedError")
+    }
+
+    static func hasVisibleWindow(process: pid_t) -> Bool {
+        guard let windows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+        ) as? [[String: Any]] else { return false }
+        // Window-server geometry is the presentation check. DOM visibility alone is also
+        // true in a headless browser, even though its native authentication anchor is hidden.
+        return windows.contains {
+            ($0[kCGWindowOwnerPID as String] as? Int) == Int(process) &&
+                ($0[kCGWindowLayer as String] as? Int) == 0
+        }
+    }
+
+    static func launchArguments(profile: URL, presentation: Presentation) -> [String] {
+        var arguments = [
+            "--no-first-run", "--no-default-browser-check",
+            "--disable-background-networking", "--disable-sync", "--disable-component-update",
+            "--remote-debugging-pipe", "--user-data-dir=" + profile.path
+        ]
+        switch presentation {
+        case .headless:
+            arguments += ["--headless=new", "about:blank"]
+        case .authenticationWindow:
+            // Create one ordinary browser window through DevTools after the pipe is ready.
+            // App/PWA windows have no usable iCloud passkey anchor in Chromium.
+            arguments += ["--no-startup-window", "--window-size=640,480"]
+        }
+        return arguments
+    }
+
+    private func start(presentation: Presentation) throws {
         let executable = URL(fileURLWithPath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
         var code: SecStaticCode?
         var requirement: SecRequirement?
@@ -159,11 +268,7 @@ final class ChromePasskeyTransport {
         )
         directory = root
         do {
-            try launch(executable.path, arguments: [
-                "--headless=new", "--no-first-run", "--no-default-browser-check",
-                "--disable-background-networking", "--disable-sync", "--disable-component-update",
-                "--remote-debugging-pipe", "--user-data-dir=" + root.path, "about:blank"
-            ])
+            try launch(executable.path, arguments: Self.launchArguments(profile: root, presentation: presentation))
         } catch {
             try? FileManager.default.removeItem(at: root)
             directory = nil
@@ -241,7 +346,7 @@ final class ChromePasskeyTransport {
             guard let base = ptr.baseAddress else { return EINVAL }
             return posix_spawn(&pid, executable, &actions, &attributes, UnsafeMutablePointer(mutating: base), environ)
         }
-        guard result == 0 else { throw failure("Cannot launch headless passkey transport (\(result)).") }
+        guard result == 0 else { throw failure("Cannot launch passkey transport (\(result)).") }
         child = pid
         input = FileHandle(fileDescriptor: dup(incoming[1]), closeOnDealloc: true)
         output = FileHandle(fileDescriptor: dup(outgoing[0]), closeOnDealloc: true)
@@ -318,6 +423,14 @@ final class ChromePasskeyTransport {
             let packet = Data(buffer[..<end])
             buffer = Data(buffer.dropFirst(end + 1))
             guard let message = try? JSONSerialization.jsonObject(with: packet) as? [String: Any] else { stop()
+                return
+            }
+            if message["method"] as? String == "Target.detachedFromTarget",
+               let session = (message["params"] as? [String: Any])?["sessionId"] as? String,
+               session == activeSession
+            {
+                // Closing the authentication window is cancellation, even if the browser stays alive.
+                stop()
                 return
             }
             if let id = message["id"] as? Int, let continuation = pending.removeValue(forKey: id) {
