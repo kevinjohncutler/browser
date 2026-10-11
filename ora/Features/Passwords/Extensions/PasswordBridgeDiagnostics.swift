@@ -30,11 +30,15 @@
             let environment = ProcessInfo.processInfo.environment
             let vendor = environment["ORA_PASSWORD_EXTENSION_BRIDGE_PROBE"] == "1"
             let reopen = environment["ORA_PASSWORD_SESSION_REOPEN_PROBE"]
-            guard vendor || reopen != nil || environment["ORA_PASSWORD_BRIDGE_PROBE"] == "1" else { return false }
+            let passkey = environment["ORA_PASSKEY_CAPABILITY_PROBE"] == "1"
+            guard vendor || passkey || reopen != nil || environment["ORA_PASSWORD_BRIDGE_PROBE"] == "1"
+            else { return false }
             let application = NSApplication.shared
             application.setActivationPolicy(.prohibited)
             Task { @MainActor in
-                let succeeded: Bool = if let reopen {
+                let succeeded: Bool = if passkey {
+                    await probePasskey()
+                } else if let reopen {
                     await probeReopen(stage: reopen)
                 } else {
                     vendor ? await probeVendor(application) : await probeTransport()
@@ -44,6 +48,23 @@
             }
             application.run()
             return true
+        }
+
+        /// The only allowed operation is availability. Never calls navigator.credentials.get.
+        private static func probePasskey() async -> Bool {
+            let connection = LocalPasskeyConnection()
+            defer { connection.cancel() }
+            do {
+                let request = try JSONSerialization.data(withJSONObject: ["operation": "available"])
+                let data = try await connection.perform(request, origin: "https://accounts.google.com")
+                let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                let available = reply?["available"] as? Bool == true
+                print("Signed passkey transport available: \(available)")
+                return available
+            } catch {
+                print("Signed passkey capability probe failed.")
+                return false
+            }
         }
 
         /// An initially empty background agent only. No pairing or credential command reaches Apple.

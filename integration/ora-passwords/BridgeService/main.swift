@@ -10,6 +10,7 @@ final class PasswordBridgeService: NSObject, PasswordBridgeServiceProtocol {
     @MainActor private var identifier: String?
     @MainActor private var stopped = false
     @MainActor private var pairingReader: ApplePasswordPairingReader?
+    @MainActor private var passkeys: [String: ChromePasskeyTransport] = [:]
     init(connection: NSXPCConnection, persistent: Bool) {
         self.connection = connection
         self.persistent = persistent
@@ -85,9 +86,37 @@ final class PasswordBridgeService: NSObject, PasswordBridgeServiceProtocol {
         }
     }
 
+    func passkey(
+        _ request: Data,
+        origin: String,
+        identifier: String,
+        withReply reply: @escaping (Data?, String?) -> Void
+    ) {
+        Task { @MainActor in
+            guard !stopped, UUID(uuidString: identifier) != nil, request.count <= 131_072,
+                  passkeys.isEmpty
+            else { reply(nil, "NotAllowedError")
+                return
+            }
+            let transport = ChromePasskeyTransport()
+            passkeys[identifier] = transport
+            defer { passkeys.removeValue(forKey: identifier) }
+            do { try await reply(transport.perform(request, origin: origin), nil) }
+            catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
+    func cancelPasskey(_ identifier: String) {
+        Task { @MainActor in passkeys.removeValue(forKey: identifier)?.stop() }
+    }
+
     func stop() {
         Task { @MainActor in
             stopped = true
+            for transport in passkeys.values {
+                transport.stop()
+            }
+            passkeys.removeAll()
             if let identifier {
                 session?.detach(identifier)
             }

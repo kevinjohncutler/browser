@@ -7,6 +7,13 @@ import Foundation
     func readPairingCode(_ identifier: String, withReply reply: @escaping (String?, String?) -> Void)
     func sessionStatus(_ identifier: String, withReply reply: @escaping (Bool, Int32) -> Void)
     func endSession(_ identifier: String, withReply reply: @escaping () -> Void)
+    func passkey(
+        _ request: Data,
+        origin: String,
+        identifier: String,
+        withReply reply: @escaping (Data?, String?) -> Void
+    )
+    func cancelPasskey(_ identifier: String)
 }
 
 @objc protocol PasswordBridgeClientProtocol {

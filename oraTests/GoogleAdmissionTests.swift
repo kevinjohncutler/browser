@@ -21,10 +21,14 @@ struct GoogleAdmissionTests {
                 userScripts: OraBrowserScripts.userScripts() + BrowserPrivacyService.privacyScripts(for: privacy),
                 privacySettings: privacy
             )
+            let passkeys = ProcessInfo.processInfo.environment["ORA_GOOGLE_PASSKEY_PROBE"] == "1" ?
+                SyntheticPasskeyConnection() : nil
+            passkeys?.hold = true
             let page = BrowserPage(
                 profile: BrowserEngineProfile(identifier: UUID(), isPrivate: true),
                 configuration: config,
-                delegate: nil
+                delegate: nil,
+                passkeys: passkeys
             )
             defer { page.teardown() }
             let view = try #require(page.contentView as? WKWebView)
@@ -60,6 +64,10 @@ struct GoogleAdmissionTests {
             """, arguments: ["account": account], in: nil, contentWorld: .page)
             var verdict = "timeout"
             for _ in 0 ..< 600 {
+                if passkeys?.requests.contains(where: { $0["operation"] as? String == "get" }) == true {
+                    verdict = "passkey-request"
+                    break
+                }
                 if let current = try? await view.evaluateJavaScript("""
                 (() => {
                   document.getAnimations().forEach(a => {if (Number.isFinite(a.effect?.getComputedTiming().endTime)) {try {a.finish()} catch {}}});
@@ -80,12 +88,23 @@ struct GoogleAdmissionTests {
             }
             let navigationPath = await (try? view.evaluateJavaScript("location.pathname")) as? String ?? "unavailable"
             evidence.append(["arm": arm, "verdict": verdict, "navigationPath": navigationPath])
+            if let passkeys {
+                // Capture only the request boundary. Never forward Google's request to a real authenticator.
+                let request = passkeys.requests.first { $0["operation"] as? String == "get" }
+                let key = request?["publicKey"] as? [String: Any]
+                if verdict == "passkey-request" {
+                    #expect(key?["rpId"] as? String == "google.com")
+                    #expect(key?["challenge"] is String)
+                }
+                evidence[evidence.count - 1]["oraPasskeyRequest"] = request != nil ? "received" : "missing"
+            }
             try JSONSerialization.data(withJSONObject: evidence, options: [.prettyPrinted, .sortedKeys])
                 .write(to: output.appendingPathComponent("evidence.json"), options: .atomic)
-            #expect(verdict == "password" || verdict == "challenge" || verdict == "passkey-pending")
+            #expect(verdict == "password" || verdict == "challenge" || verdict == "passkey-pending" || verdict ==
+                "passkey-request")
             // A passkey request can wait indefinitely for a window and user authentication.
             // Its old form is not a rendered challenge, so do not present a snapshot as proof.
-            if verdict != "passkey-pending" {
+            if verdict != "passkey-pending", verdict != "passkey-request" {
                 try await Task.sleep(nanoseconds: 1_000_000_000)
                 try await capture(view, account: account, to: output.appendingPathComponent("\(arm).png"))
             }

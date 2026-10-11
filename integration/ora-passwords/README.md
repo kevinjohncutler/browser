@@ -34,6 +34,24 @@ The compatibility adapter supplies missing Chromium history events, normalizes o
 
 ## Validation
 
+### Passkey sign-in on this Mac
+
+The development app lacks Apple's managed browser passkey entitlement. Its native WebKit passkey dialog therefore offers another device instead of the local Apple Passwords vault. Explicit passkey sign-in now uses a separate connection to the signed embedded service and the authentic signed Chrome installation. The service opens an isolated, disposable, headless browser at the requesting website's actual HTTPS origin and invokes native Web Authentication in a script world isolated from the website's scripts. It returns the assertion to the original Ora page. Existing Chrome profiles and Ora's retained password-pairing channel are not used.
+
+Ora derives the origin from WebKit's main-frame security information, accepts authentication only from the active window, and bounds the request size. Chrome validates the relying party against its own actual origin. Requests require user verification and prefer this device, with internal transport for allowed credentials. macOS controls the credential-selection and verification dialog, including any first-use permission for Chrome to access Apple passkeys. Canceling the request, navigating, closing the page, or losing the service connection stops the private process. The disposable profile is removed after the child exits. Request challenges and assertions pass through private interprocess connections and pipes, never command-line arguments, logs, or credential files. Apple retains the private keys.
+
+This path implements explicit assertions using existing passkeys. Passkey creation remains WebKit's native path. Conditional passkey suggestions, embedded-frame authentication, and binary passkey extensions are not supported by this broker; ordinary Apple password filling remains provided by the existing extension. Sites that redirect their origin root elsewhere cannot use the broker. The unavailable broker does not silently fall back to a nearby-device dialog.
+
+Headless tests verify synthetic assertions with a virtual internal authenticator in the genuine signed Chrome process. They validate the signature, challenge, origin, relying-party hash, and user-verification flags. Actual WebKit tests cover credential objects and binary serialization, frame rejection, and aborts. The real Google email-stage test captures a passkey request at Ora's handler, with credential release blocked. These tests do not prove real Apple credential release or a physical Touch ID interaction.
+
+The signed development app can test availability without requesting authentication:
+
+```sh
+ORA_PASSKEY_CAPABILITY_PROBE=1 "$ORA_APP_PATH/Contents/MacOS/OraDev"
+```
+
+The probe sends only an availability operation through the signed embedded service. It never calls `navigator.credentials.get`, reads a stored credential, or changes password pairing.
+
 ```sh
 TEST_RUNNER_ORA_APPLE_EXTENSION_PATH="$APPLE_EXTENSION_DIRECTORY" python scripts/test-web-styles.py
 ```
