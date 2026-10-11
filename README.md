@@ -49,6 +49,10 @@ The setup script installs required tooling, installs git hooks, and regenerates 
 - Regenerate the project after config changes with `xcodegen`
 - Run tests in Xcode with `Product > Test` or via `xcodebuild test -scheme ora -destination "platform=macOS"`
 
+Signed development builds use `scripts/build-dev.sh` with `ORA_DEVELOPMENT_TEAM` set to your signing team. The build records its date, revision, and build number in Settings > General. Install it with `python scripts/install-dev.py "$ORA_APP_PATH"`, where `ORA_APP_PATH` points to the built app bundle. The installer verifies the signature, retains a previous bundle for recovery, and updates Finder's bundle dates at the stable `~/Applications/OraDev.app` location without launching or quitting the browser.
+
+The optional Google admission probe reads an account identifier from a private file named by `TEST_RUNNER_ORA_GOOGLE_ACCOUNT_FILE`, with output directed by `TEST_RUNNER_ORA_GOOGLE_ADMISSION_OUTPUT`. Run `scripts/test-headless.sh -only-testing:oraTests/GoogleAdmissionTests`. It stops before password entry, records outcome labels and navigation paths without query strings, and redacts the account identifier in snapshots. A pending passkey challenge counts as admission, not completed authentication or a rendered password screen. Delete the input file after the probe. The ordinary test run skips this network/account-backed check.
+
 ## Docs
 
 - [Contributing](CONTRIBUTING.md)

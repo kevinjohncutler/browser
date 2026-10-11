@@ -6,6 +6,9 @@ targets:
       path: ora/Info/Info.dev.plist
       properties:
         CFBundleDisplayName: Ora Dev
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        OraBuildDate: $(ORA_DEV_BUILD_DATE)
+        OraBuildRevision: $(ORA_DEV_BUILD_REVISION)
         OraDisableUpdates: true
         SUEnableAutomaticChecks: false
     settings:

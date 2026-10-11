@@ -22,6 +22,19 @@ struct GeneralSettingsView: View {
                 Text("Fast, secure, and beautiful browser built for macOS")
                     .font(.caption)
                     .foregroundColor(.secondary)
+
+                if let revision = Bundle.main.infoDictionary?["OraBuildRevision"] as? String, !revision.isEmpty {
+                    Text("Revision \(revision)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                if let value = Bundle.main.infoDictionary?["OraBuildDate"] as? String,
+                   let date = ISO8601DateFormatter().date(from: value)
+                {
+                    Text("Built \(date.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
             if !defaultBrowserManager.isDefault {
