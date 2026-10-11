@@ -18,7 +18,8 @@ struct GoogleAdmissionTests {
         for arm in ["configured"] {
             let privacy = SpacePrivacySettings()
             let config = BrowserPageConfiguration.oraDefault(
-                userScripts: BrowserPrivacyService.privacyScripts(for: privacy), privacySettings: privacy
+                userScripts: OraBrowserScripts.userScripts() + BrowserPrivacyService.privacyScripts(for: privacy),
+                privacySettings: privacy
             )
             let page = BrowserPage(
                 profile: BrowserEngineProfile(identifier: UUID(), isPrivate: true),
@@ -35,6 +36,10 @@ struct GoogleAdmissionTests {
                 view,
                 script: "document.readyState === 'complete' && !!document.querySelector('#identifierId')"
             )
+            #expect(await (try? view.evaluateJavaScript("""
+            location.origin === 'https://accounts.google.com' &&
+              window.__oraFingerprintingProtectionInstalled !== true
+            """)) as? Bool == true)
             _ = try await view.callAsyncJavaScript("""
             await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]);
             document.getAnimations().forEach(a => {try {a.finish()} catch {}});
