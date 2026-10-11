@@ -92,6 +92,11 @@ struct FingerprintingProtectionProfile: Equatable {
 
         return """
         (function () {
+            // Google account admission rejects normalized browser surfaces. Preserve WebKit's
+            // native APIs on this exact authentication origin while protecting other pages.
+            if (location.origin === 'https://accounts.google.com') {
+                return;
+            }
             if (window.__oraFingerprintingProtectionInstalled) {
                 return;
             }
