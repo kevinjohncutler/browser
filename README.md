@@ -1,7 +1,7 @@
 <div align="center">
   <img width="150" height="150" src="/assets/icon.png" alt="Ora Browser logo">
-  <h1>Ora Browser</h1>
-  <p>Fast, native WebKit browser for macOS.</p>
+  <h1>Browser development fork</h1>
+  <p>A native WebKit browser for macOS, based on Ora.</p>
   <a href="https://vercel.com/oss">
   <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge.svg" />
 </a>
@@ -16,7 +16,31 @@
 </p>
 
 > [!NOTE]
-> Ora is still in active development and is not ready for daily use yet.
+> This fork is in active development. The app currently uses Ora Dev as its working display name.
+
+## Fork build identity
+
+This repository maintains a fork of [the upstream Ora browser](https://github.com/the-ora/browser).
+The permanent browser identifier is independent of its eventual product name.
+
+| Build | App identifier | Configuration |
+|---|---|---|
+| Browser review | `io.github.kevinjohncutler.browser` | `project.browser.yml` |
+| Existing development install | `io.github.kevinjohncutler.Ora.dev` | `project.dev.yml` |
+
+The browser review's embedded password service uses
+`io.github.kevinjohncutler.browser.PasswordBridge`. Its native-passkey configuration is
+`project.browser-passkeys.yml`.
+
+Native Apple passkey access requires Apple's managed browser capability and a matching
+approved provisioning profile. The current review build does not claim that restricted
+entitlement or working Apple passkey credential release. The capability request is pending.
+An Individual developer membership does not meet Apple's published organization requirement;
+the request asks Apple to consider that limitation. No approval is claimed.
+
+The review build is prepared separately from the existing development install. It does not
+replace the installed app or migrate browser data. This repository currently publishes source;
+a compiled review build has not been published as a release.
 
 ## Overview
 
@@ -34,13 +58,18 @@ Ora is a macOS browser built with SwiftUI, AppKit, and WebKit. The project aims 
 ## Quick Start
 
 ```bash
-git clone https://github.com/the-ora/browser.git
+git clone --branch dev/claude-improvements https://github.com/kevinjohncutler/browser.git
 cd browser
 ./scripts/setup.sh
-open Ora.xcodeproj
+ORA_DEVELOPMENT_TEAM="$SIGNING_TEAM" scripts/build-browser-review.sh
 ```
 
 The setup script installs required tooling, installs git hooks, and regenerates the Xcode project.
+Set `SIGNING_TEAM` to your Apple Developer team identifier before building. The review script
+creates a signed app in a separate local build directory without launching or installing it.
+Use `scripts/test-headless.sh` for headless validation. See the
+[password integration and signing documentation](integration/ora-passwords/README.md) for
+native passkey provisioning and the existing development installation workflow.
 
 ## Development
 
@@ -61,7 +90,7 @@ The optional Google admission probe reads an account identifier from a private f
 - [Security](SECURITY.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 
-## Links
+## Upstream links
 
 - [Website](https://www.orabrowser.com)
 - [Discord](https://discord.gg/9aZWH52Zjm)
