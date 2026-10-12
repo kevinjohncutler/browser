@@ -50,6 +50,21 @@ ORA_DEVELOPMENT_TEAM="$SIGNING_TEAM" scripts/build-dev.sh
 
 The build verifies the profile's capability, signing team, exact bundle identifier, expiration, and identifier before selecting the native passkey signing configuration. The main app receives that profile; the separate password service keeps its own signing configuration. Required native builds stop before compiling when no profile is supplied. The local development configuration remains available for development without the restricted capability, and Settings reports that Apple passkey access is unavailable in that build.
 
+The separate browser review configuration uses the permanent, brand-neutral identifier
+`io.github.kevinjohncutler.browser`, with a matching `.PasswordBridge` service identifier:
+
+```sh
+ORA_DEVELOPMENT_TEAM="$SIGNING_TEAM" scripts/build-browser-review.sh
+```
+
+It keeps Ora Dev as the working display name and writes to a separate review build directory.
+It does not install or launch the app. The existing development build, sandbox container,
+and retained password session keep their current identity. Switching the installed app
+requires a deliberate migration of its data and service registration. The development
+installer rejects this review identifier. An approved profile for the permanent identifier
+can be supplied through the same native-passkey environment options; its profile is checked
+against the permanent identifier rather than the legacy development identifier.
+
 An installation can require native authorization before replacing the existing app:
 
 ```sh

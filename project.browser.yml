@@ -1,0 +1,11 @@
+include:
+  - path: project.dev.yml
+targets:
+  ora:
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.kevinjohncutler.browser
+  PasswordBridge:
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.kevinjohncutler.browser.PasswordBridge

@@ -1,0 +1,12 @@
+include:
+  - path: project.browser.yml
+  - path: project.native-passkeys.yml
+targets:
+  ora:
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.kevinjohncutler.browser
+  PasswordBridge:
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.kevinjohncutler.browser.PasswordBridge
