@@ -11,7 +11,6 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     private var baseUserScripts: [WKUserScript] = []
     private var passwordRuntime: AnyObject?
     private var passwordTab: AnyObject?
-    private var passkeyBridge: PasskeyPageBridge?
     private let boostStore: BoostStore
     private var originalURL: URL?
     private(set) var lastCommittedURL: URL?
@@ -26,8 +25,7 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         configuration: BrowserPageConfiguration,
         delegate: BrowserPageDelegate?,
         boostStore: BoostStore = .shared,
-        passwordExtensions: AnyObject? = nil,
-        passkeys: PasskeyConnection? = nil
+        passwordExtensions: AnyObject? = nil
     ) {
         self.boostStore = boostStore
         let webConfiguration = WKWebViewConfiguration()
@@ -71,7 +69,6 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         self.delegate = delegate
 
         super.init()
-        configurePasskeys(passkeys, controller: contentController)
         if #available(macOS 15.4, *), let runtime = passwordRuntime as? PasswordExtensionRuntime {
             passwordTab = runtime.attach(webView)
             if passwordExtensions == nil {
@@ -231,8 +228,6 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     }
 
     func teardown() {
-        passkeyBridge?.cancel()
-        passkeyBridge = nil
         if #available(macOS 15.4, *), let runtime = passwordRuntime as? PasswordExtensionRuntime,
            let tab = passwordTab as? PasswordExtensionTab
         {
@@ -249,7 +244,6 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         webView.uiDelegate = nil
         let controller = webView.configuration.userContentController
         controller.removeAllUserScripts()
-        controller.removeScriptMessageHandler(forName: "oraPasskey", contentWorld: .page)
         for messageName in messageNames {
             controller.removeScriptMessageHandler(forName: messageName)
         }
@@ -337,7 +331,6 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        passkeyBridge?.cancel()
         updatePasswordExtensionTab()
         if !isDownloadNavigation {
             originalURL = lastCommittedURL
@@ -560,23 +553,6 @@ final class BrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 }
 
 private extension BrowserPage {
-    func configurePasskeys(_ passkeys: PasskeyConnection?, controller: WKUserContentController) {
-        if let passkeys = passkeys ?? (ProcessInfo.processInfo.environment["ORA_HEADLESS_TESTING"] != "1" ?
-            LocalPasskeyConnection() : nil)
-        {
-            let bridge = PasskeyPageBridge(connection: passkeys)
-            passkeyBridge = bridge
-            controller.addScriptMessageHandler(bridge, contentWorld: .page, name: "oraPasskey")
-            let script = WKUserScript(
-                source: PasskeyPageBridge.script,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: true
-            )
-            baseUserScripts.append(script)
-            controller.addUserScript(script)
-        }
-    }
-
     func refreshBoosts() {
         let controller = webView.configuration.userContentController
         controller.removeAllUserScripts()

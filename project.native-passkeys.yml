@@ -1,0 +1,30 @@
+include:
+  - path: project.dev.yml
+targets:
+  ora:
+    entitlements:REPLACE:
+      path: ora/Info/ora.local-dev-passkeys.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.assets.movies.read-only: true
+        com.apple.security.assets.music.read-only: true
+        com.apple.security.assets.pictures.read-only: true
+        com.apple.security.cs.allow-jit: true
+        com.apple.security.device.audio-input: true
+        com.apple.security.device.camera: true
+        com.apple.security.files.downloads.read-write: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.network.client: true
+        com.apple.security.print: true
+        com.apple.security.temporary-exception.mach-lookup.global-name:
+        - $(PRODUCT_BUNDLE_IDENTIFIER)-spks
+        - $(PRODUCT_BUNDLE_IDENTIFIER)-spki
+        - $(PRODUCT_BUNDLE_IDENTIFIER).PasswordSession
+        com.apple.developer.web-browser.public-key-credential: true
+    settings:
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_ENTITLEMENTS: ora/Info/ora.local-dev-passkeys.entitlements
+          PROVISIONING_PROFILE: ${ORA_PASSKEY_PROFILE_UUID}
+          PROVISIONING_PROFILE_SPECIFIER: ''

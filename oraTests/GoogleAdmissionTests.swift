@@ -7,6 +7,41 @@ import WebKit
 /// Opt-in admission check. It submits an account identifier and never supplies a password.
 @MainActor
 struct GoogleAdmissionTests {
+    /// Test-only interception never returns a credential or calls Apple's authenticator.
+    private static let blockAuthenticationScript = #"""
+    (() => {
+      window.__oraPasskeyProbe = {requested:false};
+      for (const method of ['get', 'create']) {
+        const native = navigator.credentials[method].bind(navigator.credentials);
+        navigator.credentials[method] = options => {
+          if (!options?.publicKey) return native(options);
+          window.__oraPasskeyProbe = {requested:true, rpId:options.publicKey.rpId,
+            hasChallenge: !!options.publicKey.challenge?.byteLength};
+          return new Promise(() => {});
+        };
+      }
+    })();
+    """#
+
+    private func configuration(privacy: SpacePrivacySettings, passkeyProbe: Bool) -> BrowserPageConfiguration {
+        var scripts = OraBrowserScripts.userScripts() + BrowserPrivacyService.privacyScripts(for: privacy)
+        scripts.append(.init(
+            name: "authentication-test-boundary",
+            source: Self.blockAuthenticationScript,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
+        if passkeyProbe {
+            scripts.append(.init(
+                name: "authentication-test-capability",
+                source: "PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => true;",
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
+        return .oraDefault(userScripts: scripts, privacySettings: privacy)
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORA_GOOGLE_ACCOUNT_FILE"] != nil))
     func checksAccountSubmissionWithProductionPrivacy() async throws {
         let file = try #require(ProcessInfo.processInfo.environment["ORA_GOOGLE_ACCOUNT_FILE"])
@@ -17,18 +52,12 @@ struct GoogleAdmissionTests {
         var evidence: [[String: String]] = []
         for arm in ["configured"] {
             let privacy = SpacePrivacySettings()
-            let config = BrowserPageConfiguration.oraDefault(
-                userScripts: OraBrowserScripts.userScripts() + BrowserPrivacyService.privacyScripts(for: privacy),
-                privacySettings: privacy
-            )
-            let passkeys = ProcessInfo.processInfo.environment["ORA_GOOGLE_PASSKEY_PROBE"] == "1" ?
-                SyntheticPasskeyConnection() : nil
-            passkeys?.hold = true
+            // Stop account-backed tests before a native credential request can reach macOS.
+            let passkeyProbe = ProcessInfo.processInfo.environment["ORA_GOOGLE_PASSKEY_PROBE"] == "1"
             let page = BrowserPage(
                 profile: BrowserEngineProfile(identifier: UUID(), isPrivate: true),
-                configuration: config,
-                delegate: nil,
-                passkeys: passkeys
+                configuration: configuration(privacy: privacy, passkeyProbe: passkeyProbe),
+                delegate: nil
             )
             defer { page.teardown() }
             let view = try #require(page.contentView as? WKWebView)
@@ -64,7 +93,9 @@ struct GoogleAdmissionTests {
             """, arguments: ["account": account], in: nil, contentWorld: .page)
             var verdict = "timeout"
             for _ in 0 ..< 600 {
-                if passkeys?.requests.contains(where: { $0["operation"] as? String == "get" }) == true {
+                if await (try? view.evaluateJavaScript("window.__oraPasskeyProbe?.requested === true")) as? Bool ==
+                    true
+                {
                     verdict = "passkey-request"
                     break
                 }
@@ -88,15 +119,14 @@ struct GoogleAdmissionTests {
             }
             let navigationPath = await (try? view.evaluateJavaScript("location.pathname")) as? String ?? "unavailable"
             evidence.append(["arm": arm, "verdict": verdict, "navigationPath": navigationPath])
-            if let passkeys {
-                // Capture only the request boundary. Never forward Google's request to a real authenticator.
-                let request = passkeys.requests.first { $0["operation"] as? String == "get" }
-                let key = request?["publicKey"] as? [String: Any]
+            if passkeyProbe {
+                let summary = await (try? view.evaluateJavaScript("window.__oraPasskeyProbe")) as? [String: Any]
                 if verdict == "passkey-request" {
-                    #expect(key?["rpId"] as? String == "google.com")
-                    #expect(key?["challenge"] is String)
+                    #expect(summary?["rpId"] as? String == "google.com")
+                    #expect(summary?["hasChallenge"] as? Bool == true)
                 }
-                evidence[evidence.count - 1]["oraPasskeyRequest"] = request != nil ? "received" : "missing"
+                evidence[evidence.count - 1]["nativeRequestBoundary"] = summary?["requested"] as? Bool == true ?
+                    "received" : "missing"
             }
             try JSONSerialization.data(withJSONObject: evidence, options: [.prettyPrinted, .sortedKeys])
                 .write(to: output.appendingPathComponent("evidence.json"), options: .atomic)

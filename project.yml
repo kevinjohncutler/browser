@@ -196,7 +196,6 @@ targets:
     sources:
       - path: oraTests
       - path: integration/ora-passwords/BridgeService/ChromePasswordTransport.swift
-      - path: integration/ora-passwords/BridgeService/ChromePasskeyTransport.swift
       - path: integration/ora-passwords/BridgeService/ApplePasswordPairingReader.swift
       - path: integration/ora-passwords/BridgeService/RetainedPasswordSession.swift
     dependencies:

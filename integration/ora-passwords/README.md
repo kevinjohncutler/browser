@@ -34,27 +34,39 @@ The compatibility adapter supplies missing Chromium history events, normalizes o
 
 ## Validation
 
-### Passkey sign-in on this Mac
+### Native passkeys in Ora
 
-The development app lacks Apple's managed browser passkey entitlement. Its native WebKit passkey dialog therefore offers another device instead of the local Apple Passwords vault. Explicit passkey sign-in uses a separate connection to the signed embedded service and the authentic signed Chrome installation. The service opens an isolated, disposable authentication window at the requesting website's actual HTTPS origin and invokes native Web Authentication in a script world isolated from the website's scripts. It returns the assertion to the original Ora page. Existing Chrome profiles and Ora's retained password-pairing channel are not used.
+WebKit owns the complete Web Authentication request and presents macOS authentication in Ora's window. Ora leaves the built-in creation, assertion, availability, conditional mediation, and extension interfaces intact. The custom JavaScript passkey shim, separate passkey service endpoints, and Chrome passkey transport have been removed. Password filling still uses the existing Apple Passwords extension and retained session; it is a separate integration.
 
-Authentication requires a visible ordinary browser window. Chromium supplies that window as the macOS authentication presentation anchor, and its own account picker may precede the system dialog. A headless browser can report local passkey availability and DOM focus while keeping both dialogs invisible. The service now launches without a startup window, creates and activates one authentication window, and checks both document focus and window-server visibility before requesting credentials. It closes the temporary browser when authentication finishes, fails, is canceled, or its window is closed. Availability checks and synthetic development tests remain headless. Production authentication can show Chrome's temporary window and account picker; this is a separate authentication surface, not a fully native Ora passkey sheet.
+Native access to existing Apple passkeys requires Apple's managed browser passkey entitlement in the signed Ora executable and a matching approved provisioning profile. Settings > Passwords reports whether this build has that signing authorization. A build without the capability does not advertise authorization through another browser. WebKit remains responsible for its native behavior and supported external authenticators.
 
-Ora derives the origin from WebKit's main-frame security information, accepts authentication only from the active window, and bounds the request size. Chrome validates the relying party against its own actual origin. Requests require user verification and prefer this device, with internal transport for allowed credentials. macOS controls the credential-selection and verification dialog, including any first-use permission for Chrome to access Apple passkeys. Canceling the request, navigating, closing the page, or losing the service connection stops the private process. The disposable profile is removed after the child exits. Request challenges and assertions pass through private interprocess connections and pipes, never command-line arguments, logs, or credential files. Apple retains the private keys.
+To build with a profile already approved for the exact development bundle identifier:
 
-This path implements explicit assertions using existing passkeys. Passkey creation remains WebKit's native path. Conditional passkey suggestions, embedded-frame authentication, and binary passkey extensions are not supported by this broker; ordinary Apple password filling remains provided by the existing extension. Sites that redirect their origin root elsewhere cannot use the broker. The unavailable broker does not silently fall back to a nearby-device dialog.
+```sh
+ORA_REQUIRE_NATIVE_PASSKEYS=1 \
+ORA_PASSKEY_PROVISIONING_PROFILE="$PASSKEY_PROFILE" \
+ORA_DEVELOPMENT_TEAM="$SIGNING_TEAM" scripts/build-dev.sh
+```
 
-Headless tests verify synthetic assertions with a virtual internal authenticator in the genuine signed Chrome process. They validate the signature, challenge, origin, relying-party hash, and user-verification flags. They also check that the production browser starts without an unrequested window, demonstrate that headless DOM focus does not imply a visible native anchor, and verify cancellation by closing the page. Actual WebKit tests cover credential objects and binary serialization, frame rejection, and aborts. The real Google email-stage test captures a passkey request at Ora's handler, with credential release blocked. These tests do not exercise the visible production authentication window, prove real Apple credential release, or verify a physical Touch ID interaction.
+The build verifies the profile's capability, signing team, exact bundle identifier, expiration, and identifier before selecting the native passkey signing configuration. The main app receives that profile; the separate password service keeps its own signing configuration. Required native builds stop before compiling when no profile is supplied. The local development configuration remains available for development without the restricted capability, and Settings reports that Apple passkey access is unavailable in that build.
 
-Fixed progress messages use the `io.orabrowser.passkeys` logging subsystem. They distinguish acceptance by the foreground Ora page, browser startup, origin and presentation readiness, native authentication dispatch, and completion or failure. Origins, account names, challenges, assertions, and credential bodies are never logged.
+An installation can require native authorization before replacing the existing app:
 
-The signed development app can test availability without requesting authentication:
+```sh
+python -S scripts/install-dev.py "$BUILT_ORA_APP" --require-native-passkeys
+```
+
+The installer checks the signed app's entitlement and embedded profile before changing the installation. Every app that declares the restricted capability must pass the profile checks, even without the required flag. macOS and Xcode remain responsible for validating Apple's signing approval. The checks do not manufacture or request an entitlement.
+
+The signed app's headless diagnostic calls only WebKit's native availability function and reads its own signing metadata:
 
 ```sh
 ORA_PASSKEY_CAPABILITY_PROBE=1 "$ORA_APP_PATH/Contents/MacOS/OraDev"
 ```
 
-The probe sends only an availability operation through the signed embedded service. It never calls `navigator.credentials.get`, reads a stored credential, or changes password pairing.
+It never invokes a credential request, launches Chrome, reads a stored passkey, or changes password pairing. It exits successfully only when native signing authorization and native platform availability are both present. A missing capability is a failed native-access check, not a passing test.
+
+Headless tests run actual Ora pages with production browser scripts, verify that WebKit authentication functions remain native across refreshes, and verify a pre-aborted native request. Account-backed admission tests use a test-only credential blocker so a website cannot initiate real authentication during the authorized email-only probe. These checks do not prove physical Touch ID or real Apple credential release. Native access is incomplete until an approved signed build passes the availability diagnostic and actual authentication is verified.
 
 ```sh
 TEST_RUNNER_ORA_APPLE_EXTENSION_PATH="$APPLE_EXTENSION_DIRECTORY" python scripts/test-web-styles.py
@@ -88,7 +100,7 @@ These checks prove the previously blocked connection and synthetic end-to-end fi
 
 ### Native passkeys and signing access
 
-The Chrome authentication window is an external-browser workaround, not native Ora integration. Its presentation does not meet the intended browser experience. The installed workaround remains available while the native route is investigated; this research does not establish a replacement implementation.
+The Chrome authentication window is an external-browser workaround, not native Ora integration. Its presentation does not meet the intended browser experience. The external passkey broker has been removed. Native WebKit authentication is now the only production passkey path, subject to the signing requirements below.
 
 Chrome calls Apple's AuthenticationServices controller with the website's challenge and origin and supplies its own window as the presentation anchor. The operating system selects the Apple passkey, verifies the user, and returns a signed assertion. Chrome's signed application has `com.apple.developer.web-browser.public-key-credential`. Safari uses Apple's system signing permissions, including `com.apple.authentication-services.allow-authentication-request-any-rpid`; Safari does not need Chrome's public entitlement key. Browser permission granted by a user and the browser's signing authorization are separate requirements.
 

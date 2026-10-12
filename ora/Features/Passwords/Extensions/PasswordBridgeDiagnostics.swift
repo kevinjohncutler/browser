@@ -1,6 +1,7 @@
 #if DEBUG
     import AppKit
     import Foundation
+    import WebKit
 
     /// Diagnostic mode cannot request pairing, credentials, or application windows.
     @MainActor
@@ -52,17 +53,34 @@
 
         /// The only allowed operation is availability. Never calls navigator.credentials.get.
         private static func probePasskey() async -> Bool {
-            let connection = LocalPasskeyConnection()
-            defer { connection.cancel() }
+            let page = BrowserPage(
+                profile: BrowserEngineProfile(identifier: UUID(), isPrivate: true),
+                configuration: .oraDefault(userScripts: [], privacySettings: .init()), delegate: nil
+            )
+            defer { page.teardown() }
             do {
-                let request = try JSONSerialization.data(withJSONObject: ["operation": "available"])
-                let data = try await connection.perform(request, origin: "https://accounts.google.com")
-                let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-                let available = reply?["available"] as? Bool == true
-                print("Signed passkey transport available: \(available)")
-                return available
+                guard let url = URL(string: "https://accounts.google.com") else { return false }
+                page.load(URLRequest(url: url))
+                guard let view = page.contentView as? WKWebView else { return false }
+                for _ in 0 ..< 400 {
+                    if await (try? view.evaluateJavaScript(
+                        "location.origin === 'https://accounts.google.com' && document.readyState === 'complete'"
+                    )) as? Bool == true {
+                        break
+                    }
+                    try await Task.sleep(nanoseconds: 50_000_000)
+                }
+                let available = try await view.callAsyncJavaScript(
+                    "return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();",
+                    arguments: [:], in: nil, contentWorld: .page
+                ) as? Bool == true
+                let authorized = NativePasskeySupport.hasBrowserAuthorization
+                print("Native Ora signing authorization: \(authorized)")
+                print("Native WebKit platform authenticator available: \(available)")
+                print("Credential requests made: false")
+                return authorized && available
             } catch {
-                print("Signed passkey capability probe failed.")
+                print("Native Ora passkey capability probe failed.")
                 return false
             }
         }

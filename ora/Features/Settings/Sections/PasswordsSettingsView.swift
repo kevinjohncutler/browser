@@ -123,6 +123,9 @@ struct PasswordsSettingsView: View {
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                Text(NativePasskeySupport.status)
+                    .font(.caption)
+                    .foregroundStyle(NativePasskeySupport.hasBrowserAuthorization ? Color.secondary : .orange)
             }
 
             if selectedProvider.usesBuiltInVault {
